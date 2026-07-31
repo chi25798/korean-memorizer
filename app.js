@@ -2773,7 +2773,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v35';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v38';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -3064,9 +3064,18 @@ function bindVocabRec(btn, wordId) {
             return;
         }
         // 无录音 → 开始录音
-        if (!Recordings.isSupported()) { toast('浏览器不支持录音功能', 'error'); return; }
+        if (!Recordings.isSupported()) { toast('此浏览器不支持录音（需要麦克风 + MediaRecorder）', 'error'); return; }
         const started = await Recordings.start();
-        if (!started) { toast('录音启动失败，请允许麦克风权限', 'error'); return; }
+        if (!started || !started.ok) {
+            const why = started && started.why;
+            let msg = '录音启动失败：' + (why || '未知错误');
+            if (why === 'NotAllowedError' || why === 'SecurityError') msg = '麦克风权限被拒绝：请在浏览器地址栏/设置里允许访问麦克风后重试';
+            else if (why === 'NotFoundError' || why === 'DevicesNotFoundError') msg = '未检测到麦克风设备，请检查平板麦克风';
+            else if (why === 'NotReadableError' || why === 'TrackStartError') msg = '麦克风被其他应用占用，请关闭其他录音软件';
+            else if (why === 'unsupported') msg = '此浏览器不支持录音（需要麦克风 + MediaRecorder）';
+            toast(msg, 'error');
+            return;
+        }
         recActiveWordId = wordId;
         recActiveBtn = btn;
         btn.classList.add('recording');

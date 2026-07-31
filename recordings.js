@@ -110,9 +110,12 @@ const Recordings = (() => {
         return cache.size;
     }
 
-    // ===== 播放元素（用 video 绕过夸克限制） =====
-    let playEl = null;
-    let lastUrl = null;
+    // ===== 播放（三级回退：video → audio → Web Audio API） =====
+    // 录音是 MediaRecorder 生成的 webm/mp4，夸克 video 元素可能不支持（TTS 的 MP3 能播）
+    let playEl = null;        // video 元素
+    let recAudioEl = null;    // audio 元素（本地 blob 一般不受夸克静音限制）
+    let audioCtx = null;      // Web Audio 上下文
+    let playLastUrl = null;
 
     function ensurePlayEl() {
         if (playEl && playEl.isConnected) return playEl;
@@ -132,19 +135,54 @@ const Recordings = (() => {
         return playEl;
     }
 
-    /** 播放指定词的录音 */
+    function ensureRecAudioEl() {
+        if (recAudioEl && recAudioEl.isConnected) return recAudioEl;
+        recAudioEl = document.createElement('audio');
+        recAudioEl.preload = 'auto';
+        recAudioEl.setAttribute('playsinline', '');
+        recAudioEl.setAttribute('webkit-playsinline', '');
+        recAudioEl.setAttribute('x5-playsinline', '');
+        (document.body || document.documentElement).appendChild(recAudioEl);
+        return recAudioEl;
+    }
+
+    /** 播放指定词的录音（Web Audio 优先，直接输出扬声器，夸克无法静音；失败再回退 video/audio） */
     async function play(wordId) {
         const blob = await get(wordId);
         if (!blob) return false;
-        const el = ensurePlayEl();
-        if (lastUrl) { URL.revokeObjectURL(lastUrl); lastUrl = null; }
-        lastUrl = URL.createObjectURL(blob);
-        el.src = lastUrl;
-        el.load();
+        if (playLastUrl) { try { URL.revokeObjectURL(playLastUrl); } catch (e) { /* 忽略 */ } }
+        playLastUrl = URL.createObjectURL(blob);
+
+        // 方法1：Web Audio API 解码播放（绕过媒体元素解码器，最可靠）
         try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+            const buf = await blob.arrayBuffer();
+            const decoded = await audioCtx.decodeAudioData(buf);
+            const srcNode = audioCtx.createBufferSource();
+            srcNode.buffer = decoded;
+            srcNode.connect(audioCtx.destination);
+            srcNode.start();
+            return true;
+        } catch (e1) { /* 继续尝试 */ }
+
+        // 方法2：video 元素（TTS 同款方案）
+        try {
+            const el = ensurePlayEl();
+            el.src = playLastUrl;
+            el.load();
             await el.play();
             return true;
-        } catch (e) {
+        } catch (e2) { /* 继续尝试 */ }
+
+        // 方法3：audio 元素（本地 blob 通常不受夸克静音限制）
+        try {
+            const a = ensureRecAudioEl();
+            a.src = playLastUrl;
+            a.load();
+            await a.play();
+            return true;
+        } catch (e3) {
             return false;
         }
     }
@@ -159,21 +197,21 @@ const Recordings = (() => {
     }
 
     async function start() {
-        if (!isSupported()) return false;
+        if (!isSupported()) return { ok: false, why: 'unsupported' };
         try {
             activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // 选一个浏览器支持的 mimeType
-            const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
-                : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+            // 选一个浏览器支持的 mimeType（mp4/AAC 优先，播放端兼容性最好）
+            const mime = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
                 : '';
             mediaRecorder = mime ? new MediaRecorder(activeStream, { mimeType: mime }) : new MediaRecorder(activeStream);
             chunks = [];
             mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
             mediaRecorder.start();
-            return true;
+            return { ok: true };
         } catch (e) {
             if (activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
-            return false;
+            return { ok: false, why: (e && e.name) || 'unknown' };
         }
     }
 
@@ -213,3 +251,9 @@ const Recordings = (() => {
         isSupported, start, stopAndSave, abort, isRecording
     };
 })();
+
+// 关键：const 声明的全局变量不会挂到 window 上，
+// 其他脚本用 window.Recordings 检查会永远 undefined → 这里显式挂载
+if (typeof window !== 'undefined') {
+    window.Recordings = Recordings;
+}
