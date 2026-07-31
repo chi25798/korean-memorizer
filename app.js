@@ -2795,7 +2795,13 @@ function bindTtsMode() {
   });
   const test = $el('tts-test');
   if (test && test.addEventListener) {
-    test.addEventListener('click', () => Audio.speak('안녕하세요，한국어 공부 파이팅'));
+    test.addEventListener('click', async () => {
+      const ok = await Audio.speak('안녕하세요，한국어 공부 파이팅');
+      if (!ok) {
+        const why = Audio.getLastError ? Audio.getLastError() : '';
+        toast('发音失败：' + (why || '请检查网络或手机音量'), 'error');
+      }
+    });
   }
 }
 

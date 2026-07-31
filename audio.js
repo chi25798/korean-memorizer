@@ -16,6 +16,7 @@ const Audio = (() => {
     let voicesLoaded = false;
     let onlineAudio = null;          // 当前在线播放的 audio 元素
     let onlineSeq = 0;               // 在线播放序号（用于打断旧播放的回调）
+    let lastErr = '';                // 最近一次在线发音失败原因（诊断用）
 
     const TTS_MODE_KEY = 'km_tts_mode';
     const TTS_MODES = ['auto', 'online', 'local'];
@@ -67,8 +68,25 @@ const Audio = (() => {
     function useLocalNow() {
         if (ttsMode === 'local') return true;
         if (ttsMode === 'online') return false;
-        // auto：设备有韩语语音 → 系统；没有 → 在线（手机/平板常见）
+        // auto：移动端优先在线（安卓的 speechSynthesis 常「假支持」韩语：列得出来但发不出声）；
+        // 桌面（Chrome 内置 Google 韩语语音）用系统，没有韩语语音时回退在线。
+        if (isMobile()) return false;
         return hasKoreanVoice();
+    }
+
+    // 常驻隐藏 audio 元素：安卓 WebView / 微信 X5 内核要求音频元素在 DOM 中才允许播放
+    let audioEl = null;
+    function ensureAudioEl() {
+        if (audioEl && audioEl.isConnected) return audioEl;
+        try {
+            audioEl = document.createElement('audio');
+            audioEl.preload = 'auto';
+            audioEl.style.display = 'none';
+            audioEl.setAttribute('playsinline', '');
+            audioEl.setAttribute('webkit-playsinline', '');
+            (document.body || document.documentElement).appendChild(audioEl);
+        } catch (e) { /* 忽略 */ }
+        return audioEl;
     }
 
     /**
@@ -98,7 +116,7 @@ const Audio = (() => {
     }
 
     /**
-     * 在线朗读：依次尝试各引擎，某个引擎播放成功即返回
+     * 在线朗读：依次尝试各引擎，某个引擎真实出声（onplaying）即返回
      * @returns {Promise<boolean>}
      */
     function speakOnline(text) {
@@ -109,9 +127,8 @@ const Audio = (() => {
                 if (seq !== onlineSeq) { resolve(false); return; }   // 已被新的朗读打断
                 if (i >= ONLINE_TTS.length) { resolve(false); return; }
                 const eng = ONLINE_TTS[i];
-                let a = null;
-                try { a = new Audio(); } catch (e) { /* 忽略 */ }
-                if (!a) { tryEngine(i + 1); return; }
+                const a = ensureAudioEl();
+                if (!a) { lastErr = '浏览器不支持 audio 元素'; tryEngine(i + 1); return; }
                 onlineAudio = a;
                 let settled = false;
                 const finish = (ok) => {
@@ -119,28 +136,32 @@ const Audio = (() => {
                     settled = true;
                     resolve(ok);
                 };
-                const fail = () => {
+                const fail = (why) => {
                     if (settled) return;
                     settled = true;
-                    try { a.pause(); a.src = ''; } catch (e) { /* 忽略 */ }
+                    lastErr = (eng.name + ': ' + (why || '加载失败'));
+                    try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* 忽略 */ }
                     if (onlineAudio === a) onlineAudio = null;
                     tryEngine(i + 1);
                 };
-                a.addEventListener('error', fail, { once: true });
-                a.addEventListener('ended', () => { if (onlineAudio === a) onlineAudio = null; }, { once: true });
+                a.onerror = () => fail('加载失败');
+                a.onended = () => { if (onlineAudio === a) onlineAudio = null; };
+                a.onplaying = () => finish(true);
+                a.volume = 1;
+                a.muted = false;
                 a.src = eng.build(text);
+                a.load();
                 const p = a.play();
-                if (p && p.then) {
-                    p.then(() => finish(true)).catch(fail);
-                } else {
-                    finish(true);
-                }
+                if (p && p.catch) p.catch((e) => fail(String(e && e.name || e)));
                 // 加载超时兜底（8 秒）
-                setTimeout(() => { if (!settled) fail(); }, 8000);
+                setTimeout(() => { if (!settled) fail('超时'); }, 8000);
             };
             tryEngine(0);
         });
     }
+
+    /** 最近一次在线发音失败原因（诊断用） */
+    function getLastError() { return lastErr; }
 
     /**
      * 停止朗读
@@ -157,7 +178,7 @@ const Audio = (() => {
     function stopOnlineSpeak() {
         onlineSeq++;
         if (onlineAudio) {
-            try { onlineAudio.pause(); onlineAudio.src = ''; } catch (e) { /* 忽略 */ }
+            try { onlineAudio.pause(); onlineAudio.removeAttribute('src'); onlineAudio.load(); } catch (e) { /* 忽略 */ }
             onlineAudio = null;
         }
     }
@@ -254,6 +275,7 @@ const Audio = (() => {
         getMode,
         setMode,
         hasKoreanVoice,
+        getLastError,
         startRecording,
         stopRecording,
         playRecording,
