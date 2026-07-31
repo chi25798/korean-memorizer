@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>韩语背诵</title>
+    <meta name="description" content="韩语单词背诵与复习，艾宾浩斯记忆曲线">
+    <meta name="theme-color" content="#F5F1E9">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-180.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="韩语背诵">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="ink-theme.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 侧边导航 -->
+        <nav class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">韓</span>
+                <span class="logo-text">韩语背诵</span>
+            </div>
+            <ul class="nav-list">
+                <!-- 墨竹：立身有节，日课不辍 -->
+                <li class="nav-item active" data-page="learn">
+                    <span class="nav-icon" title="墨竹">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10.4 21.5V3.2"/>
+                            <path d="M8.1 7.6h4.6M8.1 12.1h4.6M8.1 16.6h4.6"/>
+                            <path d="M12.7 9.2c2.7-.5 4.5-1.9 5.3-4.2-2.8.1-4.6 1.5-5.3 4.2z"/>
+                            <path d="M8.1 14.4c-2.3-.4-3.9-1.6-4.6-3.5 2.4.1 3.9 1.3 4.6 3.5z"/>
+                        </svg>
+                    </span>
+                    <span>背单词</span>
+                </li>
+                <!-- 涟漪：温故如水，回环不息 -->
+                <li class="nav-item" data-page="review">
+                    <span class="nav-icon" title="涟漪">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+                            <path d="M18.6 4.6a3.6 3.6 0 1 1-3.4-1.1"/>
+                            <path d="M2.6 12.6c1.7-1.6 3.4-1.6 5.1 0s3.4 1.6 5.1 0 3.4-1.6 5.1 0"/>
+                            <path d="M2.6 16.4c1.7-1.6 3.4-1.6 5.1 0s3.4 1.6 5.1 0 3.4-1.6 5.1 0"/>
+                            <path d="M2.6 20.2c1.7-1.6 3.4-1.6 5.1 0s3.4 1.6 5.1 0 3.4-1.6 5.1 0"/>
+                        </svg>
+                    </span>
+                    <span>背单词复习</span>
+                </li>
+                <!-- 远山孤日：登高有径，按程而行 -->
+                <li class="nav-item" data-page="plan">
+                    <span class="nav-icon" title="远山">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="17.6" cy="6" r="2.5"/>
+                            <path d="M2 18.4l5.1-7.3 3.6 5.1 3.2-4.5 6.1 6.7"/>
+                            <path d="M2.4 21.4h19.2"/>
+                        </svg>
+                    </span>
+                    <span>计划</span>
+                </li>
+                <!-- 芙蕖：出水见字，一池清词 -->
+                <li class="nav-item" data-page="vocab">
+                    <span class="nav-icon" title="芙蕖">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 4.6c1.7 1.9 2.5 3.7 2.5 5.6s-.8 3.7-2.5 5.2c-1.7-1.5-2.5-3.3-2.5-5.2S10.3 6.5 12 4.6z"/>
+                            <path d="M12 15.4c-2.3.7-4.5.2-6.5-1.4 1.1-2.2 2.8-3.3 5-3.5"/>
+                            <path d="M12 15.4c2.3.7 4.5.2 6.5-1.4-1.1-2.2-2.8-3.3-5-3.5"/>
+                            <path d="M3 19.4c2.6 1.2 5.6 1.8 9 1.8s6.4-.6 9-1.8"/>
+                        </svg>
+                    </span>
+                    <span>词库</span>
+                </li>
+                <!-- 扁舟：载书渡水，新词入港 -->
+                <li class="nav-item" data-page="import">
+                    <span class="nav-icon" title="扁舟">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3.4 14.6h17.2l-2.5 4.1H5.9z"/>
+                            <path d="M12 14.6V3.4"/>
+                            <path d="M12 5.1l4.6 5.1H12"/>
+                            <path d="M2.4 21.6c1.7-1.2 3.2-1.2 4.9 0s3.2 1.2 4.9 0 3.2-1.2 4.9 0"/>
+                        </svg>
+                    </span>
+                    <span>导入</span>
+                </li>
+                <!-- 云月：闲云望月，观己之功 -->
+                <li class="nav-item" data-page="me">
+                    <span class="nav-icon" title="云月">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15.4 2.8a7.7 7.7 0 1 0 5.3 9.9 6.5 6.5 0 0 1-5.3-9.9z"/>
+                            <path d="M2.4 18.4c1.8-1.3 3.4-1.3 5.2 0"/>
+                            <path d="M4.4 21.4c2.1-1.4 4-1.4 6.1 0"/>
+                        </svg>
+                    </span>
+                    <span>我的</span>
+                </li>
+            </ul>
+            <div class="nav-footer">
+                <div class="profile-chip" id="profile-chip" title="切换用户">
+                    <span class="pc-avatar" id="pc-avatar">🐰</span>
+                    <span class="pc-name" id="pc-name">我</span>
+                    <span class="pc-switch">切换</span>
+                </div>
+                <div class="streak-info">
+                    <span class="streak-icon">🔥</span>
+                    <span id="streak-days">0</span> 天连续
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 背单词页 -->
+            <div class="page active" id="page-learn">
+                <div class="page-header">
+                    <h2 id="learn-page-title">背单词</h2>
+                    <button class="btn-back hidden" id="learn-back-btn">← 返回课程列表</button>
+                    <div class="learn-progress">
+                        <span id="learn-count">第 1 / 20 词</span>
+                    </div>
+                </div>
+                <div id="learn-lesson-list">
+                    <!-- 课程列表动态生成 -->
+                </div>
+                <div class="learn-container" id="learn-container">
+                    <!-- 单词卡片（可左右翻页浏览本课所有单词） -->
+                    <button class="card-nav card-nav-prev" id="card-prev" title="上一个（←）">‹</button>
+                    <button class="card-nav card-nav-next" id="card-next" title="下一个（→）">›</button>
+                    <div class="word-card" id="word-card">
+                        <div class="word-card-top">
+                            <span class="card-status-tag" id="card-status">未学</span>
+                            <span class="card-mode-badge hidden" id="card-mode-badge"></span>
+                            <button class="card-btn-speak" id="card-speak" title="朗读">
+                                🔊
+                            </button>
+                            <button class="card-btn-edit" id="card-edit" title="修改单词 / 释义">✎</button>
+                        </div>
+                        <div class="word-card-main">
+                            <div class="word-korean" id="card-korean">안녕하세요</div>
+                            <div class="word-pronunciation" id="card-pronunciation">[an-nyeong-ha-se-yo]</div>
+                            <div class="word-chinese hidden" id="card-chinese">你好</div>
+                            <div class="card-listen-hint hidden" id="card-listen-hint">🎧 听发音，想中文意思</div>
+                            <button class="btn-flip" id="btn-flip">点击显示中文</button>
+                            <div class="card-prompt-label hidden" id="card-prompt-label">选出正确的韩语：</div>
+                            <div class="word-card-options hidden" id="card-options"></div>
+                        </div>
+                        <div class="word-card-example hidden" id="card-example">
+                            <div class="example-korean" id="card-example-ko"></div>
+                            <div class="example-chinese" id="card-example-zh"></div>
+                        </div>
+                        <div class="word-card-actions hidden" id="card-actions">
+                            <button class="btn-rate btn-unfamiliar" data-rate="0">
+                                <span class="btn-rate-icon">😕</span>
+                                <span>不熟悉</span>
+                                <span class="btn-rate-hint">重来</span>
+                            </button>
+                            <button class="btn-rate btn-fuzzy" data-rate="1">
+                                <span class="btn-rate-icon">😐</span>
+                                <span>模糊</span>
+                                <span class="btn-rate-hint">稍后复习</span>
+                            </button>
+                            <button class="btn-rate btn-known" data-rate="2">
+                                <span class="btn-rate-icon">😊</span>
+                                <span>认识</span>
+                                <span class="btn-rate-hint">下次见</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- 本课单词小圆点导航 -->
+                    <div class="card-dots" id="card-dots"></div>
+                    <div class="card-tip">← → 键翻页，手机可左右滑动</div>
+                </div>
+                <div class="learn-empty hidden" id="learn-empty">
+                    <div class="empty-icon">🎉</div>
+                    <h3>今天的单词都学完啦！</h3>
+                    <p>明天再来学习新单词吧~</p>
+                </div>
+            </div>
+
+            <!-- 背单词：模式选择弹窗 -->
+            <div class="modal-overlay hidden" id="learn-mode-overlay">
+                <div class="modal-card">
+                    <h3 class="modal-title">🎴 选择练习模式</h3>
+                    <p class="modal-sub">先选运行方式：混合可多选，分离只能选一种。</p>
+                    <div class="mode-list">
+                        <label class="mode-item">
+                            <input type="checkbox" data-mode="ko2zh" checked>
+                            <span class="mode-name">韩语 → 汉语</span>
+                            <span class="mode-desc">看韩语，想中文意思（默认模式）</span>
+                        </label>
+                        <label class="mode-item">
+                            <input type="checkbox" data-mode="zh2ko">
+                            <span class="mode-name">汉语 → 韩语</span>
+                            <span class="mode-desc">看中文，从选项里选出正确韩语</span>
+                        </label>
+                        <label class="mode-item">
+                            <input type="checkbox" data-mode="listen2zh">
+                            <span class="mode-name">听力 → 汉语</span>
+                            <span class="mode-desc">听韩语发音，想中文意思</span>
+                        </label>
+                    </div>
+                    <div class="mode-style">
+                        <div class="mode-style-title">运行方式</div>
+                        <label class="mode-style-item">
+                            <input type="radio" name="learn-run" value="mixed" checked>
+                            <span><b>混合</b>：可多选，每个词按所选模式各来一次（推荐）</span>
+                        </label>
+                        <label class="mode-style-item">
+                            <input type="radio" name="learn-run" value="separate">
+                            <span><b>分离</b>：只能选一种模式，每个词只来一次</span>
+                        </label>
+                    </div>
+                    <div class="mode-tip" id="learn-mode-tip"></div>
+                    <div class="modal-actions">
+                        <button class="btn-secondary" id="learn-mode-cancel">取消</button>
+                        <button class="btn-primary" id="learn-mode-start">开始学习</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 背单词复习页 -->
+            <div class="page" id="page-review">
+                <div class="page-header">
+                    <h2>温故</h2>
+                </div>
+                <div class="review-modes">
+                    <div class="review-mode-card" id="review-flash">
+                        <div class="mode-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M4 6.5c2.2-1.9 4.4-1.9 6.6 0s4.4 1.9 6.6 0"/><path d="M3 12c2.4-2 4.7-2 7.1 0s4.7 2 7.1 0"/><path d="M4 17.5c2.2-1.9 4.4-1.9 6.6 0s4.4 1.9 6.6 0"/><circle cx="19.6" cy="4.4" r="1.6"/></svg></div>
+                        <h3>单词闪过</h3>
+                        <p>快速翻看到期单词，巩固记忆</p>
+                        <div class="mode-badge" id="flash-count">0 词待复习</div>
+                    </div>
+                    <div class="review-mode-card" id="review-spell">
+                        <div class="mode-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 3.4h5.6l-1 9.4a1.8 1.8 0 0 1-3.6 0z"/><path d="M12 12.8v5.2"/><path d="M10.4 18h3.2l-1.6 3z"/><path d="M4 21.4c2.2-1.3 4.2-1.3 6.4 0"/></svg></div>
+                        <h3>手写拼写</h3>
+                        <p>听发音或看中文，拼写韩语</p>
+                        <select class="spell-lesson-select" id="spell-lesson" title="选择要拼写的课程"></select>
+                        <div class="mode-badge" id="spell-count">0 词可拼写</div>
+                    </div>
+                </div>
+
+                <!-- 闪过复习 -->
+                <div class="review-session hidden" id="flash-session">
+                    <div class="session-header">
+                        <button class="btn-back" data-back="review">← 返回</button>
+                        <span class="session-progress" id="flash-progress">1 / 10</span>
+                    </div>
+                    <div class="flash-card" id="flash-card">
+                        <button class="card-btn-speak" id="flash-speak">🔊</button>
+                        <div class="flash-korean" id="flash-korean"></div>
+                        <div class="flash-pronunciation" id="flash-pronunciation"></div>
+                        <div class="flash-chinese hidden" id="flash-chinese"></div>
+                        <div class="flash-example hidden" id="flash-example"></div>
+                        <button class="btn-flip" id="flash-flip">点击翻转</button>
+                    </div>
+                    <div class="flash-actions">
+                        <button class="btn-rate btn-unfamiliar" data-flash-rate="0">😕 不熟悉</button>
+                        <button class="btn-rate btn-fuzzy" data-flash-rate="1">😐 模糊</button>
+                        <button class="btn-rate btn-known" data-flash-rate="2">😊 记住了</button>
+                    </div>
+                </div>
+
+                <!-- 拼写复习 -->
+                <div class="review-session hidden" id="spell-session">
+                    <div class="session-header">
+                        <button class="btn-back" data-back="review">← 返回</button>
+                        <span class="session-progress" id="spell-progress">1 / 10</span>
+                    </div>
+                    <div class="spell-card" id="spell-card">
+                        <div class="spell-prompt">
+                            <button class="btn-speak-large" id="spell-speak">🔊 听发音</button>
+                            <div class="spell-chinese" id="spell-chinese"></div>
+                        </div>
+
+                        <div class="spell-mode-tabs" id="spell-mode-tabs">
+                            <button class="spell-mode-tab active" data-spell-mode="input" type="button">⌨ 输入法</button>
+                            <button class="spell-mode-tab" data-spell-mode="canvas" type="button">✎ 手写板</button>
+                        </div>
+
+                        <div class="spell-input-area" id="spell-input-area">
+                            <input type="text" class="spell-input" id="spell-input" placeholder="在这里输入韩语（可用手写笔直接写）..." lang="ko" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+                            <input type="text" class="spell-input" id="spell-input-hidden" placeholder="" autocomplete="off" style="display:none">
+                            <button class="btn-submit-spell" id="spell-submit" type="button">确认</button>
+                        </div>
+
+                        <div class="spell-canvas-area hidden" id="spell-canvas-area">
+                            <canvas class="spell-canvas" id="spell-canvas"></canvas>
+                            <div class="spell-canvas-tools">
+                                <button class="btn-undo-canvas" id="spell-undo" type="button" disabled>撤销</button>
+                                <button class="btn-clear-canvas" id="spell-clear" type="button">清屏</button>
+                                <button class="btn-reveal-canvas" id="spell-reveal" type="button">显示答案</button>
+                            </div>
+                        </div>
+
+                        <div class="spell-result hidden" id="spell-result">
+                            <div class="spell-correct" id="spell-correct"></div>
+                            <div class="spell-your" id="spell-your"></div>
+                            <div class="spell-self-rate hidden" id="spell-self-rate">
+                                <button class="btn-self-rate btn-known" data-self-rate="2" type="button">✓ 写对了</button>
+                                <button class="btn-self-rate btn-unfamiliar" data-self-rate="0" type="button">✗ 写错了</button>
+                            </div>
+                        </div>
+                        <button class="btn-next-spell hidden" id="spell-next" type="button">下一个 →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 计划页 -->
+            <div class="page" id="page-plan">
+                <div class="page-header">
+                    <h2>课程表</h2>
+                </div>
+
+                <!-- 今日计划概览 -->
+                <div class="plan-today-overview" id="plan-today-overview">
+                    <div class="plan-today-date" id="plan-today-date"></div>
+                    <div class="plan-today-cards">
+                        <div class="plan-today-card plan-card-word">
+                            <div class="ptc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 21V3.4"/><path d="M8.2 7.8h4.4M8.2 12.2h4.4M8.2 16.6h4.4"/><path d="M12.6 9.2c2.6-.5 4.3-1.8 5-4-2.6.1-4.3 1.4-5 4z"/></svg></div>
+                            <div class="ptc-body">
+                                <div class="ptc-title">今日单词</div>
+                                <div class="ptc-progress">
+                                    <span class="ptc-current" id="plan-word-done">0</span>
+                                    <span class="ptc-sep">/</span>
+                                    <span class="ptc-target" id="plan-word-target">0</span>
+                                </div>
+                                <div class="ptc-bar"><div class="ptc-bar-fill word-fill" id="plan-word-bar"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="plan-today-status" id="plan-today-status"></div>
+                </div>
+
+                <!-- 计划设置 -->
+                <div class="plan-settings-card">
+                    <h3>⚙️ 设置每日目标</h3>
+                    <div class="plan-setting-rows">
+                        <div class="plan-setting-row">
+                            <div class="psr-label">
+                                <span class="psr-icon">篇</span>
+                                <span>每天新单词</span>
+                            </div>
+                            <div class="psr-control">
+                                <button class="psr-stepper" data-plan-step="word" data-dir="-1">−</button>
+                                <span class="psr-value" id="plan-word-setting">10</span>
+                                <button class="psr-stepper" data-plan-step="word" data-dir="1">+</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="plan-toggle-row">
+                        <span class="psr-label">启用计划追踪</span>
+                        <label class="lang-switch">
+                            <input type="checkbox" id="plan-enabled" checked>
+                            <span class="lang-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 近7天完成情况 -->
+                <div class="plan-history-card">
+                    <h3>📊 近7天完成情况</h3>
+                    <div class="plan-history-grid" id="plan-history-grid"></div>
+                    <div class="plan-history-grid" id="plan-history-grid-2"></div>
+                </div>
+
+                <!-- 计划进度详情 -->
+                <div class="plan-detail-card">
+                    <h3>🎯 课程进度详情</h3>
+                    <div class="plan-detail-rows" id="plan-detail-rows"></div>
+                </div>
+            </div>
+
+            <!-- 背单词复习页 与 计划页 之间的词库页 -->
+            <div class="page" id="page-vocab">
+                <div class="page-header">
+                    <h2>词林</h2>
+                    <div class="vocab-search">
+                        <input type="text" id="vocab-search-input" placeholder="搜索单词 / 中文意思..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="vocab-layout">
+                    <aside class="vocab-sidebar" id="vocab-sidebar">
+                        <!-- 册/课 分组列表动态生成 -->
+                    </aside>
+                    <section class="vocab-main">
+                        <div class="vocab-main-header" id="vocab-main-header"></div>
+                        <div class="vocab-word-list" id="vocab-word-list">
+                            <!-- 单词行动态生成 -->
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- 导入页 -->
+            <div class="page" id="page-import">
+                <div class="page-header">
+                    <h2>纳新</h2>
+                </div>
+                <div class="import-wrap">
+                    <div class="import-card">
+                        <h3 class="import-h3">1. 选择文件或粘贴文字</h3>
+                        <div class="import-drop" id="import-drop">
+                            <div class="idrop-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.6h13.2l2.8 3v11.8H4z"/><path d="M17.2 4.6v3H20"/><path d="M7.4 10.6h9M7.4 13.8h9M7.4 17h5.6"/></svg></div>
+                            <div class="idrop-title">点击选择文件，或把文件拖到这里</div>
+                            <div class="idrop-hint">支持 PDF（文字版）· Word（.docx）· Excel（.xlsx/.xls）· TXT · CSV · Markdown</div>
+                            <input type="file" id="import-file" accept=".pdf,.docx,.txt,.csv,.md,.tsv,.xlsx,.xls" hidden>
+                        </div>
+                        <textarea class="import-textarea" id="import-textarea" placeholder="也可以直接粘贴单词表，每行一个，例如：&#10;안녕하세요    你好&#10;감사합니다  谢谢&#10;책 | 书"></textarea>
+                        <div class="import-row">
+                            <button class="btn-primary" id="import-parse-btn">🔍 识别单词</button>
+                            <span class="import-status hidden" id="import-status"></span>
+                        </div>
+                    </div>
+
+                    <div class="import-card">
+                        <div class="import-h3-row">
+                            <h3 class="import-h3">2. 核对识别结果</h3>
+                            <div class="import-h3-right">
+                                <span id="import-count"></span>
+                                <button class="btn-mini" id="import-check-all">全选 / 全不选</button>
+                            </div>
+                        </div>
+                        <div class="import-preview" id="import-preview"></div>
+                    </div>
+
+                    <div class="import-card">
+                        <h3 class="import-h3">3. 放进哪本书</h3>
+                        <p class="import-book-tip">📘 书名是框架，每一课都挂在它下面</p>
+                        <div class="import-row">
+                            <select class="import-select" id="import-book-select"></select>
+                        </div>
+                        <div class="import-row hidden" id="import-new-book-row">
+                            <div class="import-field-block">
+                                <label class="import-field-label">📘 新书名字（顶层框架）</label>
+                                <input class="import-input" id="import-book" list="book-list" placeholder="如：延世2 / 我的TOPIK词书">
+                                <datalist id="book-list"></datalist>
+                            </div>
+                            <div class="import-hint-line" id="import-book-hint"></div>
+                        </div>
+                        <div class="import-row">
+                            <select class="import-select" id="import-append-target"></select>
+                        </div>
+                        <div class="import-row hidden" id="import-new-fields">
+                            <div class="import-field-block">
+                                <label class="import-field-label">课名（属于上面那本书）</label>
+                                <input class="import-input" id="import-title" placeholder="如：第5课 学校生活">
+                            </div>
+                        </div>
+                        <div class="import-row">
+                            <button class="btn-primary btn-lg" id="import-confirm-btn">✅ 确认导入</button>
+                        </div>
+                    </div>
+
+                    <div class="import-card">
+                        <h3 class="import-h3">已导入的内容</h3>
+                        <div id="import-custom-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 我的（用户与记录）页 -->
+            <div class="page" id="page-me">
+                <div class="page-header">
+                    <h2>案头</h2>
+                </div>
+                <div class="me-wrap">
+                    <div class="me-card">
+                        <h3 class="import-h3">界面缩放</h3>
+                        <p class="me-hint">拖动调整整体大小，自动记住。手写板区域固定不缩放。</p>
+                        <div class="ui-zoom-row">
+                            <input type="range" id="ui-zoom" class="ui-zoom-slider" min="0.9" max="1.4" step="0.05" value="1.1">
+                            <span class="ui-zoom-value" id="ui-zoom-value">110%</span>
+                        </div>
+                    </div>
+
+                    <div class="me-card">
+                        <div class="import-h3-row">
+                            <h3 class="import-h3">用户</h3>
+                            <button class="btn-mini" id="me-add-user">➕ 添加用户</button>
+                        </div>
+                        <p class="me-hint">每个用户的学习进度、复习计划都是独立的，互不影响。</p>
+                        <div class="profile-grid" id="profile-grid"></div>
+                    </div>
+
+                    <div class="me-card">
+                        <h3 class="import-h3">清除记录 · 重新练习</h3>
+                        <p class="me-hint">清除后单词本身不会消失，只是把「学过/记忆进度」归零，可以从头再背一遍。</p>
+                        <div class="me-actions">
+                            <button class="btn-danger-soft" id="me-reset-lesson">🔁 按课程重置进度</button>
+                            <button class="btn-danger-soft" id="me-reset-all">🧹 重置当前用户全部进度</button>
+                        </div>
+                        <div class="me-lesson-reset hidden" id="me-lesson-reset"></div>
+                    </div>
+
+                    <div class="me-card">
+                        <h3 class="import-h3">数据</h3>
+                        <div class="me-actions">
+                            <button class="btn-mini" id="me-export">⬇️ 导出我的进度</button>
+                            <button class="btn-mini" id="me-import-progress">⬆️ 导入进度文件</button>
+                            <input type="file" id="me-progress-file" accept=".json" hidden>
+                        </div>
+                        <p class="me-hint">换电脑或换手机时，用它把进度搬过去。</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 用户切换弹窗 -->
+    <div class="modal hidden" id="modal-profile">
+        <div class="modal-content modal-profile-content">
+            <div class="modal-header">
+                <h3>选择用户</h3>
+                <button class="modal-close" data-close="modal-profile">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="profile-grid" id="profile-grid-modal"></div>
+                <div class="profile-new">
+                    <div class="avatar-picker" id="avatar-picker"></div>
+                    <label class="avatar-upload-btn" title="用照片当头像">
+                        📷 上传照片
+                        <input type="file" id="avatar-upload" accept="image/*" hidden>
+                    </label>
+                    <div class="import-row">
+                        <input class="import-input" id="new-profile-name" placeholder="昵称">
+                        <button class="btn-primary" id="new-profile-btn">创建</button>
+                        <button class="btn-mini hidden" id="new-profile-cancel">取消</button>
+                    </div>
+                    <div class="profile-edit-hint hidden" id="profile-edit-hint"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 单词编辑弹窗（按用户隔离）-->
+    <div class="modal hidden" id="word-edit-modal">
+        <div class="modal-content word-edit-content">
+            <div class="modal-header">
+                <h3>✎ 修改单词 / 释义</h3>
+                <button class="modal-close" data-close="word-edit-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-sub">修改只对你当前用户生效，不影响其他用户，也不会改动共享词库。</p>
+                <div class="we-field">
+                    <label>韩语</label>
+                    <input class="we-input" id="we-korean" type="text" lang="ko" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="韩语拼写">
+                </div>
+                <div class="we-field">
+                    <label>发音</label>
+                    <input class="we-input" id="we-pron" type="text" placeholder="发音（可选）">
+                </div>
+                <div class="we-field">
+                    <label>中文释义</label>
+                    <input class="we-input" id="we-chinese" type="text" placeholder="中文意思">
+                </div>
+                <div class="we-field">
+                    <label>例句（韩）</label>
+                    <input class="we-input" id="we-exko" type="text" lang="ko" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="例句韩语（可选）">
+                </div>
+                <div class="we-field">
+                    <label>例句（中）</label>
+                    <input class="we-input" id="we-exzh" type="text" placeholder="例句中文（可选）">
+                </div>
+                <div class="we-actions">
+                    <button class="btn-mini hidden" id="we-revert" type="button">恢复原始</button>
+                    <button class="btn-cancel" id="we-cancel" type="button" data-close="word-edit-modal">取消</button>
+                    <button class="btn-primary" id="we-save" type="button">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div class="toast hidden" id="toast"></div>
+
+    <script src="data.js"></script>
+    <script src="profiles.js"></script>
+    <script src="srs.js"></script>
+    <script src="audio.js"></script>
+    <script src="importer.js"></script>
+    <script src="app.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('sw.js').catch(function (err) {
+            console.warn('SW 注册失败', err);
+          });
+        });
+      }
+    </script>
+</body>
+</html>
