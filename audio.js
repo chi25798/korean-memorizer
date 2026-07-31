@@ -81,16 +81,26 @@ const Audio = (() => {
         return hasKoreanVoice();
     }
 
-    // 常驻隐藏 audio 元素：安卓 WebView / 微信 X5 内核要求音频元素在 DOM 中才允许播放
+    // 常驻播放元素：用 <video> 而非 <audio>！
+    // 关键：夸克浏览器对 display:none 的 <audio> 元素静默不出声（bilibili 用 <video> 却能响），
+    // <video> 可正常播放音频文件（MP3），且屏幕外定位（非 display:none）避免被浏览器特殊对待。
     let audioEl = null;
     function ensureAudioEl() {
         if (audioEl && audioEl.isConnected) return audioEl;
         try {
-            audioEl = document.createElement('audio');
+            audioEl = document.createElement('video');
             audioEl.preload = 'auto';
-            audioEl.style.display = 'none';
+            // 屏幕外定位，保持「可见媒体」身份，规避 display:none 被静音/拦截
+            audioEl.style.position = 'fixed';
+            audioEl.style.left = '-9999px';
+            audioEl.style.width = '2px';
+            audioEl.style.height = '2px';
+            audioEl.style.opacity = '0.01';
+            audioEl.style.pointerEvents = 'none';
+            audioEl.style.zIndex = '-1';
             audioEl.setAttribute('playsinline', '');
             audioEl.setAttribute('webkit-playsinline', '');
+            audioEl.setAttribute('x5-playsinline', '');
             (document.body || document.documentElement).appendChild(audioEl);
         } catch (e) { /* 忽略 */ }
         return audioEl;
