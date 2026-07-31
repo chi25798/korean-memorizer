@@ -493,6 +493,15 @@
                     </div>
 
                     <div class="me-card">
+                        <h3 class="import-h3">🎤 我的录音</h3>
+                        <p class="me-hint">在「词库」点 🎤 录制自己的发音，之后所有朗读优先用你的录音（不依赖网络）。</p>
+                        <div class="me-actions">
+                            <span class="me-hint">已录 <span id="rec-count">0</span> 个词</span>
+                            <button class="btn-danger-soft" id="rec-clear">🗑️ 清除全部录音</button>
+                        </div>
+                    </div>
+
+                    <div class="me-card">
                         <div class="import-h3-row">
                             <h3 class="import-h3">用户</h3>
                             <button class="btn-mini" id="me-add-user">➕ 添加用户</button>
@@ -596,6 +605,7 @@
     <script src="profiles.js"></script>
     <script src="srs.js"></script>
     <script src="audio.js"></script>
+    <script src="recordings.js"></script>
     <script src="importer.js"></script>
     <script src="app.js"></script>
     <script>

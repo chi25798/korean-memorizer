@@ -971,7 +971,7 @@ async function renderListen2Zh(word) {
     if (flip.dataset) delete flip.dataset.pendingSpeak;
     // 自动朗读（短延迟确保语音引擎就绪；手机/平板若被系统拦截则改为点击播放）
     setTimeout(async () => {
-        const ok = await Audio.speak(word.korean);
+        const ok = await Audio.speak(word.korean, 0.9, word.id);
         if (!ok && flip.dataset) {
             flip.textContent = '🔊 点击播放发音';
             flip.dataset.pendingSpeak = word.korean;
@@ -1403,7 +1403,7 @@ function submitSpell() {
     document.getElementById('spell-submit').classList.add('hidden');
 
     // 朗读正确答案
-    Audio.speak(word.korean);
+    Audio.speak(word.korean, 0.9, word.id);
 }
 
 function nextSpell() {
@@ -1527,7 +1527,7 @@ function revealCanvasAnswer() {
     document.getElementById('spell-clear').classList.add('hidden');
     document.getElementById('spell-undo').classList.add('hidden');
     document.getElementById('spell-self-rate').classList.remove('hidden');
-    Audio.speak(word.korean);
+    Audio.speak(word.korean, 0.9, word.id);
 }
 
 function selfRateSpell(rate) {
@@ -2047,7 +2047,8 @@ function bindEvents() {
         if (btn.disabled) return;
         const ko = document.getElementById('card-korean').textContent;
         if (!ko) return;
-        Audio.speak(ko);
+        const _w = learnQueue[learnIndex];
+        Audio.speak(ko, 0.9, _w ? _w.id : null);
     });
     // 单词编辑弹窗
     const weSave = $el('we-save');
@@ -2073,7 +2074,8 @@ function bindEvents() {
     document.getElementById('review-spell').addEventListener('click', startSpellReview);
     document.getElementById('flash-speak').addEventListener('click', () => {
         const ko = document.getElementById('flash-korean').textContent;
-        Audio.speak(ko);
+        const _w = flashQueue[flashIndex];
+        Audio.speak(ko, 0.9, _w ? _w.id : null);
     });
     document.getElementById('flash-flip').addEventListener('click', flipFlashCard);
     document.querySelectorAll('[data-flash-rate]').forEach(btn => {
@@ -2081,7 +2083,7 @@ function bindEvents() {
     });
     document.getElementById('spell-speak').addEventListener('click', () => {
         const word = spellQueue[spellIndex];
-        if (word) Audio.speak(word.korean);
+        if (word) Audio.speak(word.korean, 0.9, word.id);
     });
     document.getElementById('spell-submit').addEventListener('click', submitSpell);
     document.getElementById('spell-next').addEventListener('click', nextSpell);
@@ -2346,8 +2348,10 @@ function renderVocabAll() {
                 row.className = 'vocab-word-row' + (edited ? ' is-edited' : '');
                 const hasExample = w.exampleKo || w.exampleZh;
                 const isCustom = isCustomWord(w);
+                const hasRec = (typeof window.Recordings !== 'undefined') && Recordings.hasCached(w.id);
                 row.innerHTML = `
                     <button class="vocab-speak" title="朗读">🔊</button>
+                    <button class="vocab-rec${hasRec ? ' has-rec' : ''}" data-vrec="${w.id}" title="${hasRec ? '播放录音（再次点击重录）' : '点击录音'}">🎤</button>
                     <button class="vocab-word-edit" data-vwedit="${w.id}" title="修改单词 / 释义">✎</button>
                     <div class="vocab-word-main">
                         <div class="vocab-word-ko">${escapeHtml(w.korean)}${edited ? '<span class="vocab-word-edited-dot" title="你已修改此词">●</span>' : ''}</div>
@@ -2357,7 +2361,8 @@ function renderVocabAll() {
                     </div>
                     ${isCustom ? `<button class="vocab-word-del" data-vwdel="${w.id}" title="删除此单词">✕</button>` : ''}
                 `;
-                row.querySelector('.vocab-speak').addEventListener('click', () => Audio.speak(w.korean));
+                row.querySelector('.vocab-speak').addEventListener('click', () => Audio.speak(w.korean, 0.9, w.id));
+                bindVocabRec(row.querySelector('.vocab-rec'), w.id, w.korean);
                 if (isCustom) {
                     row.querySelector('.vocab-word-del').addEventListener('click', () => {
                         if (!confirm('确定删除单词「' + w.korean + '」吗？\n（这是你导入的词，会同时从学习进度里移除）')) return;
@@ -2768,7 +2773,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v34';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v35';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -3031,6 +3036,50 @@ function safeRun(label, fn) {
     }
 }
 
+// ===== 词库录音管理 =====
+let recActiveWordId = null;   // 当前正在录音的 wordId
+let recActiveBtn = null;      // 当前录音按钮元素
+
+function bindVocabRec(btn, wordId) {
+    if (!btn || !window.Recordings) return;
+    btn.addEventListener('click', async () => {
+        // 正在录音 → 停止并保存
+        if (Recordings.isRecording()) {
+            const ok = await Recordings.stopAndSave(recActiveWordId);
+            if (recActiveBtn) {
+                recActiveBtn.classList.remove('recording');
+                recActiveBtn.textContent = '🎤';
+                if (ok) recActiveBtn.classList.add('has-rec');
+            }
+            recActiveWordId = null;
+            recActiveBtn = null;
+            if (ok) { toast('录音已保存 ✓', 'success'); updateRecCount(); }
+            else toast('录音失败，请检查麦克风权限', 'error');
+            return;
+        }
+        // 有录音 → 播放
+        if (Recordings.hasCached(wordId)) {
+            const ok = await Recordings.play(wordId);
+            if (!ok) toast('录音播放失败', 'error');
+            return;
+        }
+        // 无录音 → 开始录音
+        if (!Recordings.isSupported()) { toast('浏览器不支持录音功能', 'error'); return; }
+        const started = await Recordings.start();
+        if (!started) { toast('录音启动失败，请允许麦克风权限', 'error'); return; }
+        recActiveWordId = wordId;
+        recActiveBtn = btn;
+        btn.classList.add('recording');
+        btn.textContent = '⏹';
+        toast('🎤 录音中…再次点击停止', 'info');
+    });
+}
+
+function updateRecCount() {
+    const el = $el('rec-count');
+    if (el && window.Recordings) el.textContent = Recordings.count();
+}
+
 function init() {
     // 必须最先执行：在读取任何进度前，把本地旧 word id 迁移到规范 id
     safeRun('migrateWordIds', migrateLegacyWordIds);
@@ -3038,6 +3087,14 @@ function init() {
     DB.load();
     DB.loadPlan();
     safeRun('audio', () => Audio.init());
+    safeRun('recordings', () => { if (window.Recordings) Recordings.init().then(() => updateRecCount()); });
+    safeRun('recClear', () => {
+        const rc = $el('rec-clear');
+        if (rc) rc.addEventListener('click', async () => {
+            if (!confirm('确定清除全部录音吗？此操作不可撤销。')) return;
+            if (window.Recordings) { await Recordings.clear(); updateRecCount(); if (typeof renderVocabAll === 'function') renderVocabAll(); toast('已清除全部录音', 'success'); }
+        });
+    });
     // 先注册委托类事件，保证「我的」页按钮不受其它绑定失败影响
     safeRun('profileEvents', bindProfileEvents);
     safeRun('events', bindEvents);

@@ -464,6 +464,13 @@ body::after {
     color: #FFFDF9;
     border-color: transparent;
 }
+/* 录音按钮 */
+.vocab-rec { cursor: pointer; }
+.vocab-rec:hover { background: var(--gradient-pink); color: #FFFDF9; border-color: transparent; }
+.vocab-rec.has-rec { background: rgba(78, 205, 196, 0.18); border-color: #4ECDC4; color: #2a9d8f; }
+.vocab-rec.has-rec:hover { background: var(--gradient-blue); }
+.vocab-rec.recording { background: #e5484d; color: #fff; border-color: #e5484d; animation: recPulse 0.8s ease-in-out infinite; }
+@keyframes recPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 .card-btn-speak:disabled,
 .card-btn-speak.is-disabled {
     background: rgba(240, 236, 228, 0.7);

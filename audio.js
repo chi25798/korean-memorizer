@@ -137,8 +137,19 @@ const Audio = (() => {
      * @param {number} rate - 语速（0.5-2.0，默认0.9）
      * @returns {Promise<boolean>} 是否成功开始播放
      */
-    function speak(text, rate = 0.9) {
-        if (!text) return Promise.resolve(false);
+    /**
+     * 朗读：优先播放用户录音（如有），无录音则走 TTS。
+     * wordId 可选 —— 传了会先查内存缓存（同步），有录音才异步播放；
+     * 无录音时直接走 TTS，不引入异步等待，保留移动端手势栈。
+     */
+    async function speak(text, rate = 0.9, wordId = null) {
+        if (wordId && window.Recordings && Recordings.hasCached(wordId)) {
+            try {
+                const ok = await Recordings.play(wordId);
+                if (ok) return true;
+            } catch (e) { /* 忽略，回退 TTS */ }
+        }
+        if (!text) return false;
         if (useLocalNow() && synthesis) {
             return speakLocal(text, rate);
         }

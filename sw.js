@@ -1,11 +1,11 @@
 /* 韩语背诵 - Service Worker
  * 策略：网络优先（保证加新册后刷新即更新），断网时回退缓存。
  */
-const CACHE = 'korean-memorizer-v34';
+const CACHE = 'korean-memorizer-v35';
 const ASSETS = [
   './', './index.html', './styles.css', './ink-theme.css',
   './data.js', './profiles.js', './srs.js', './audio.js',
-  './importer.js', './app.js',
+  './recordings.js', './importer.js', './app.js',
   './manifest.json', './icon-192.png', './icon-512.png'
 ];
 
