@@ -74,22 +74,44 @@ const Audio = (() => {
         return hasKoreanVoice();
     }
 
-    // 常驻隐藏 audio 元素池（每引擎一个）：安卓 WebView / 微信 X5 内核要求音频元素在 DOM 中才允许播放
-    let audioPool = [];
-    function ensurePool() {
-        if (audioPool.length) return audioPool;
+    // 常驻隐藏 audio 元素：安卓 WebView / 微信 X5 内核要求音频元素在 DOM 中才允许播放
+    let audioEl = null;
+    function ensureAudioEl() {
+        if (audioEl && audioEl.isConnected) return audioEl;
         try {
-            audioPool = ONLINE_TTS.map(() => {
-                const a = document.createElement('audio');
-                a.preload = 'auto';
-                a.style.display = 'none';
-                a.setAttribute('playsinline', '');
-                a.setAttribute('webkit-playsinline', '');
-                (document.body || document.documentElement).appendChild(a);
-                return a;
-            });
+            audioEl = document.createElement('audio');
+            audioEl.preload = 'auto';
+            audioEl.style.display = 'none';
+            audioEl.setAttribute('playsinline', '');
+            audioEl.setAttribute('webkit-playsinline', '');
+            (document.body || document.documentElement).appendChild(audioEl);
         } catch (e) { /* 忽略 */ }
-        return audioPool;
+        return audioEl;
+    }
+
+    /**
+     * 清理文本以适配 TTS 接口：
+     * 词库中语法词含 --前缀、(括号)、/斜杠、?问号、.句号 等，
+     * 这些会导致有道/百度 TTS 返回错误或空音频。
+     * 例: "--(으)ㄹ까요?" → "ㄹ까요", "맛(이)있다" → "맛있다", "나/저" → "나"
+     */
+    function cleanTextForTTS(text) {
+        if (!text) return '';
+        let t = text;
+        // 去掉开头的 -- 或 -
+        t = t.replace(/^--?/g, '');
+        // 去掉括号内容（(으)、(이)、(무엇을) 等），保留括号外的文字
+        t = t.replace(/\([^)]*\)/g, '');
+        // 斜杠分隔的取第一个（나/저 → 나, -아/어 보다 → 아 보다）
+        t = t.split('/')[0];
+        // 去掉末尾标点
+        t = t.replace(/[?.!。？！,\s]+$/g, '');
+        t = t.trim();
+        // 如果清理后没有韩文字符了，回退：去掉括号符号但保留内容
+        if (!/[\uAC00-\uD7A3]/.test(t)) {
+            t = text.replace(/^--?/g, '').replace(/[()]/g, '').split('/')[0].replace(/[?.!。？！]+$/g, '').trim();
+        }
+        return t || text.trim();
     }
 
     /**
@@ -119,54 +141,82 @@ const Audio = (() => {
     }
 
     /**
-     * 在线朗读：所有引擎并行请求，谁先真实出声（onplaying）用谁，其余立即停掉
-     * 解决「某个引擎被浏览器拦截（如夸克 abort 有道）→ 串行等待切换」造成的延迟
+     * 在线朗读：单元素快速串行（避免安卓双元素 play() 互斥 abort）
+     * 引擎0先试，800ms 未出声或出错 → 切引擎1。
+     * play().then() 也算成功（部分浏览器 onplaying 不触发但实际已出声）。
      * @returns {Promise<boolean>}
      */
     function speakOnline(text) {
         const seq = ++onlineSeq;
         stopLocalSpeak();
-        const pool = ensurePool();
-        if (!pool.length) {
-            lastErr = '浏览器不支持 audio 元素';
-            return Promise.resolve(false);
-        }
+        const cleaned = cleanTextForTTS(text);
+        if (!cleaned) { lastErr = '文本为空'; return Promise.resolve(false); }
+        const a = ensureAudioEl();
+        if (!a) { lastErr = '浏览器不支持 audio'; return Promise.resolve(false); }
+
         return new Promise((resolve) => {
             let settled = false;
-            let failures = 0;
-            const elState = pool.map(() => ({ failed: false }));
-            const finish = (ok) => { if (settled) return; settled = true; resolve(ok); };
-            const noteFail = (idx, why) => {
-                if (elState[idx].failed) return;
-                elState[idx].failed = true;
-                failures++;
-                lastErr = ((ONLINE_TTS[idx] || {}).name || ('引擎' + idx)) + ': ' + (why || '失败');
-                if (failures >= pool.length && !settled) finish(false);
+            let switchTimer = null;
+            const finish = (ok) => {
+                if (settled) return;
+                settled = true;
+                if (switchTimer) { clearTimeout(switchTimer); switchTimer = null; }
+                resolve(ok);
             };
-            pool.forEach((a, idx) => {
+
+            const tryEngine = (idx) => {
+                if (seq !== onlineSeq) { finish(false); return; }
+                if (idx >= ONLINE_TTS.length) { finish(false); return; }
                 const eng = ONLINE_TTS[idx];
-                if (!eng) return;
-                a.onerror = () => noteFail(idx, 'abort/加载失败');
-                a.onplaying = () => {
-                    if (settled) { try { a.pause(); } catch (e) { /* 忽略 */ } return; }
-                    finish(true);
-                    // 停掉其它引擎，避免重复出声
-                    pool.forEach((o, j) => {
-                        if (j !== idx) {
-                            try { o.pause(); o.removeAttribute('src'); o.load(); } catch (e) { /* 忽略 */ }
-                        }
-                    });
+                let engineDone = false;
+
+                // 标记此引擎结束（成功或失败），阻止重复回调
+                const engineSettle = (ok, why) => {
+                    if (engineDone || settled) return;
+                    engineDone = true;
+                    if (switchTimer) { clearTimeout(switchTimer); switchTimer = null; }
+                    if (ok) {
+                        finish(true);
+                    } else {
+                        lastErr = (eng.name || '引擎' + idx) + ': ' + (why || '失败');
+                        try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* 忽略 */ }
+                        tryEngine(idx + 1);   // 快速切换下一个引擎
+                    }
                 };
+
+                a.onerror = () => engineSettle(false, '加载失败');
+                a.onplaying = () => engineSettle(true);
                 a.onended = () => { if (onlineAudio === a) onlineAudio = null; };
                 a.volume = 1;
                 a.muted = false;
-                a.src = eng.build(text);
+                a.src = eng.build(cleaned);
                 a.load();
+
                 const p = a.play();
-                if (p && p.catch) p.catch((e) => noteFail(idx, String(e && e.name || e)));
-            });
-            // 兜底：5 秒内无人出声 → 失败
-            setTimeout(() => { if (!settled) finish(false); }, 5000);
+                if (p && p.then) {
+                    p.then(() => {
+                        // play() 成功 → 给 onplaying 400ms 机会，否则直接算成功
+                        // （部分安卓浏览器 onplaying 不触发但音频实际在播放）
+                        if (!engineDone && !settled) {
+                            setTimeout(() => {
+                                if (!engineDone && !settled && seq === onlineSeq) {
+                                    engineSettle(true);
+                                }
+                            }, 400);
+                        }
+                    }).catch((e) => engineSettle(false, String(e && e.name || e)));
+                }
+
+                // 800ms 未出声 → 切换下一个引擎（不等 8s 超时）
+                switchTimer = setTimeout(() => {
+                    if (!engineDone) engineSettle(false, '超时');
+                }, 800);
+            };
+
+            tryEngine(0);
+
+            // 总兜底 6s
+            setTimeout(() => finish(false), 6000);
         });
     }
 
@@ -187,9 +237,9 @@ const Audio = (() => {
 
     function stopOnlineSpeak() {
         onlineSeq++;
-        audioPool.forEach((a) => {
-            try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* 忽略 */ }
-        });
+        if (audioEl) {
+            try { audioEl.pause(); audioEl.removeAttribute('src'); audioEl.load(); } catch (e) { /* 忽略 */ }
+        }
         onlineAudio = null;
     }
 
@@ -286,6 +336,7 @@ const Audio = (() => {
         setMode,
         hasKoreanVoice,
         getLastError,
+        cleanTextForTTS,
         startRecording,
         stopRecording,
         playRecording,

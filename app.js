@@ -2768,7 +2768,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v30';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v31';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2799,7 +2799,7 @@ function bindTtsMode() {
   const test = $el('tts-test');
   if (test && test.addEventListener) {
     test.addEventListener('click', async () => {
-      const ok = await Audio.speak('안녕하세요，한국어 공부 파이팅');
+      const ok = await Audio.speak('안녕하세요');
       if (!ok) {
         const why = Audio.getLastError ? Audio.getLastError() : '';
         toast('发音失败：' + (why || '请检查网络或手机音量'), 'error');
