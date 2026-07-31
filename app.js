@@ -963,13 +963,20 @@ function renderKo2Zh(word) {
 }
 
 // 模式②：听力 → 汉语（听发音，想中文）
-function renderListen2Zh(word) {
+async function renderListen2Zh(word) {
     document.getElementById('card-listen-hint').classList.remove('hidden');
     const flip = document.getElementById('btn-flip');
     flip.classList.remove('hidden');
     flip.textContent = '🔊 已播放，点击显示中文';
-    // 自动朗读（短延迟确保语音引擎就绪）
-    setTimeout(() => Audio.speak(word.korean), 280);
+    if (flip.dataset) delete flip.dataset.pendingSpeak;
+    // 自动朗读（短延迟确保语音引擎就绪；手机/平板若被系统拦截则改为点击播放）
+    setTimeout(async () => {
+        const ok = await Audio.speak(word.korean);
+        if (!ok && flip.dataset) {
+            flip.textContent = '🔊 点击播放发音';
+            flip.dataset.pendingSpeak = word.korean;
+        }
+    }, 280);
 }
 
 // 模式③：汉语 → 韩语（看中文，从选项里选）
@@ -1059,6 +1066,13 @@ function cardNext() {
 }
 
 function flipCard() {
+    // 听力模式：自动播放失败时（手机/平板），点击翻面先补播发音
+    const flipBtn = document.getElementById('btn-flip');
+    if (flipBtn && flipBtn.dataset && flipBtn.dataset.pendingSpeak) {
+        const t = flipBtn.dataset.pendingSpeak;
+        delete flipBtn.dataset.pendingSpeak;
+        Audio.speak(t);
+    }
     document.getElementById('card-chinese').classList.remove('hidden');
     document.getElementById('card-example').classList.remove('hidden');
     document.getElementById('card-actions').classList.remove('hidden');
@@ -2753,11 +2767,44 @@ function bindUiZoom() {
   });
 }
 
+// ===== 发音方式设置 =====
+function ttsEngineDesc(m) {
+  if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
+  if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
+  return '自动选择：设备有韩语语音用系统发音，没有则用在线发音';
+}
+function syncTtsModeControl() {
+  const m = Audio.getMode();
+  document.querySelectorAll('input[name="tts-mode"]').forEach(r => {
+    r.checked = (r.value === m);
+  });
+  const desc = $el('tts-engine-desc');
+  if (desc && desc.textContent !== undefined) desc.textContent = ttsEngineDesc(m);
+}
+function bindTtsMode() {
+  const radios = document.querySelectorAll('input[name="tts-mode"]');
+  if (!radios.length) return;
+  radios.forEach(r => {
+    r.addEventListener('change', () => {
+      if (!r.checked) return;
+      Audio.setMode(r.value);
+      syncTtsModeControl();
+      const name = r.value === 'auto' ? '自动' : (r.value === 'online' ? '在线发音' : '系统发音');
+      toast('发音方式已切换为：' + name, 'success');
+    });
+  });
+  const test = $el('tts-test');
+  if (test && test.addEventListener) {
+    test.addEventListener('click', () => Audio.speak('안녕하세요，한국어 공부 파이팅'));
+  }
+}
+
 // ===== 我的页 =====
 function initMePage() {
     updateProfileChip();
     renderProfileGrid('profile-grid');
     syncUiZoomControl();
+    syncTtsModeControl();
     const box = document.getElementById('me-lesson-reset');
     if (box) box.classList.add('hidden');
 }
@@ -2932,6 +2979,7 @@ function init() {
     safeRun('importEvents', bindImportEvents);
     safeRun('chip', updateProfileChip);
     safeRun('uiZoom', bindUiZoom);
+    safeRun('ttsMode', bindTtsMode);
     applyUiZoom(getUiZoom());
     navigateTo('learn');
 

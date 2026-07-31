@@ -678,6 +678,11 @@ body { zoom: var(--ui-zoom, 1.1); }
 .ui-zoom-slider { flex: 1; min-width: 0; height: 6px; accent-color: #4ECDC4; cursor: pointer; }
 .ui-zoom-value { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #2b2b2b; letter-spacing: 0; }
 
+/* 发音方式设置 */
+.tts-mode-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 8px; }
+.tts-mode-row label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 14px; color: #3a3a42; }
+.tts-mode-row input[type="radio"] { accent-color: #FF6B9D; width: 15px; height: 15px; cursor: pointer; }
+
 .import-drop {
     border: 1.5px dashed rgba(50, 50, 60, 0.22);
     border-radius: 4px;
