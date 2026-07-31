@@ -2768,7 +2768,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v32';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v33';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2806,6 +2806,62 @@ function bindTtsMode() {
       }
     });
   }
+  const diag = $el('tts-diag');
+  if (diag && diag.addEventListener) {
+    diag.addEventListener('click', () => runTtsDiagnostics());
+  }
+}
+
+// ===== 发音一键诊断 =====
+function testEngineLoad(name, url, cb) {
+  const a = document.createElement('audio');
+  let done = false;
+  const finish = (ok, msg) => {
+    if (done) return;
+    done = true;
+    try { a.removeAttribute('src'); a.load(); } catch (e) { /* 忽略 */ }
+    cb(ok, msg);
+  };
+  a.onerror = () => finish(false, '加载失败(error)');
+  a.onloadedmetadata = () => finish(true, '音频有效');
+  a.oncanplay = () => finish(true, '可播放');
+  a.src = url;
+  a.load();
+  setTimeout(() => finish(false, '超时(8秒)'), 8000);
+}
+
+function runTtsDiagnostics() {
+  const out = $el('tts-diag-out');
+  if (!out) return;
+  out.classList.remove('hidden');
+  const esc = escapeHtml;
+  let d = null;
+  try { d = Audio.diagnose(); } catch (e) { /* 忽略 */ }
+  out.innerHTML =
+    '<div><b>环境信息</b></div>' +
+    '<div>版本：' + esc(APP_VERSION) + '</div>' +
+    '<div>当前模式：' + (d ? esc(d.mode) : '?') + '</div>' +
+    '<div>移动端判定：' + (d && d.isMobile ? '<span class="ok">是（触屏/UA）</span>' : '<span class="fail">否 —— 平板可能被误判，导致自动模式走系统语音</span>') + '</div>' +
+    '<div>系统语音：' + (d && d.synthesisSupported ? '支持' : '<span class="fail">不支持</span>') +
+    (d && d.synthesisSupported ? '，韩语语音包：' + (d.hasKoreanVoice ? '<span class="ok">有</span>' : '<span class="fail">无</span>') : '') + '</div>' +
+    '<div class="dim" style="margin-top:4px">UA：' + esc(d ? d.ua : '?') + '</div>' +
+    '<div style="margin-top:8px"><b>发音服务器连通性测试…</b></div>';
+
+  const q = encodeURIComponent('안녕하세요');
+  const engines = [
+    { name: '百度', url: 'https://fanyi.baidu.com/gettts?lan=kor&text=' + q + '&spd=3&source=web' },
+    { name: '有道', url: 'https://dict.youdao.com/dictvoice?audio=' + q + '&type=2' }
+  ];
+  engines.forEach((eng) => {
+    out.insertAdjacentHTML('beforeend', '<div id="diag-' + eng.name + '">' + eng.name + '：测试中…</div>');
+    testEngineLoad(eng.name, eng.url, (ok, msg) => {
+      const el = $el('diag-' + eng.name);
+      if (el) {
+        el.innerHTML = eng.name + '：' + (ok ? '<span class="ok">✔ ' + esc(msg) + '（服务器可达）</span>' : '<span class="fail">✘ ' + esc(msg) + '（被拦截或网络不通）</span>');
+      }
+    });
+  });
+  out.insertAdjacentHTML('beforeend', '<div class="dim" style="margin-top:6px">若两个引擎都 ✔ 但仍无声，问题在「播放」环节：请点上方「🔊 试听」并告诉我结果；同时检查平板媒体音量/静音开关。</div>');
 }
 
 // ===== 我的页 =====

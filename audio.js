@@ -29,8 +29,15 @@ const Audio = (() => {
     ];
 
     // 移动端判断（Android / iOS / 平板）
+    // 注意：很多安卓平板的 UA 不含 Mobile/Tablet 字样（如 "Mozilla/5.0 (Linux; Android 13; ...)"），
+    // 必须同时用触屏检测兜底，否则平板会被当成桌面 → auto 模式误走系统语音（无声）
     function isMobile() {
-        return /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent || '');
+        const ua = navigator.userAgent || '';
+        if (/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua)) return true;
+        try {
+            if (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)) return true;
+        } catch (e) { /* 忽略 */ }
+        return false;
     }
 
     // 初始化语音合成
@@ -123,21 +130,52 @@ const Audio = (() => {
     function speak(text, rate = 0.9) {
         if (!text) return Promise.resolve(false);
         if (useLocalNow() && synthesis) {
-            try {
-                synthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'ko-KR';
-                utterance.rate = rate;
-                utterance.pitch = 1.0;
-                if (koreanVoice) utterance.voice = koreanVoice;
-                synthesis.speak(utterance);
-                return Promise.resolve(true);
-            } catch (e) {
-                // 系统语音异常 → 回退在线
-                return speakOnline(text);
-            }
+            return speakLocal(text, rate);
         }
         return speakOnline(text);
+    }
+
+    /**
+     * 系统语音朗读（带验证）：
+     * 安卓 speechSynthesis 常「假支持」韩语（有 voice 但发不出声也不报错），
+     * 用 onstart 事件 + 1.5s 超时验证是否真实开始朗读，失败自动回退在线发音。
+     * @returns {Promise<boolean>}
+     */
+    function speakLocal(text, rate) {
+        return new Promise((resolve) => {
+            let done = false;
+            const finish = (ok) => {
+                if (done) return;
+                done = true;
+                resolve(ok);
+            };
+            let u = null;
+            try {
+                synthesis.cancel();
+                u = new SpeechSynthesisUtterance(text);
+                u.lang = 'ko-KR';
+                u.rate = rate;
+                u.pitch = 1.0;
+                if (koreanVoice) u.voice = koreanVoice;
+                u.onstart = () => finish(true);   // 真实开始朗读才算成功
+                u.onerror = () => finish(false);
+                synthesis.speak(u);
+            } catch (e) {
+                finish(false);
+                return;
+            }
+            // 1.5s 内没开始朗读 → 视为「假支持」，回退在线
+            setTimeout(() => {
+                if (!done) {
+                    lastErr = '系统语音无响应（可能缺少韩语语音）';
+                    try { synthesis.cancel(); } catch (e) { /* 忽略 */ }
+                    finish(false);
+                }
+            }, 1500);
+        }).then((ok) => {
+            if (ok) return true;
+            return speakOnline(text);
+        });
     }
 
     /**
@@ -222,6 +260,20 @@ const Audio = (() => {
 
     /** 最近一次在线发音失败原因（诊断用） */
     function getLastError() { return lastErr; }
+
+    /** 发音环境诊断信息（供「我的」页一键诊断按钮展示） */
+    function diagnose() {
+        return {
+            ua: navigator.userAgent || '',
+            isMobile: isMobile(),
+            mode: ttsMode,
+            hasKoreanVoice: !!koreanVoice,
+            voicesLoaded: voicesLoaded,
+            synthesisSupported: ('speechSynthesis' in window),
+            engineCount: ONLINE_TTS.length,
+            engineNames: ONLINE_TTS.map(e => e.name)
+        };
+    }
 
     /**
      * 停止朗读
@@ -337,6 +389,7 @@ const Audio = (() => {
         hasKoreanVoice,
         getLastError,
         cleanTextForTTS,
+        diagnose,
         startRecording,
         stopRecording,
         playRecording,
