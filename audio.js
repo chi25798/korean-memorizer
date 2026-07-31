@@ -22,10 +22,10 @@ const Audio = (() => {
     const TTS_MODES = ['auto', 'online', 'local'];
     let ttsMode = 'auto';            // 'auto' | 'online' | 'local'
 
-    // 在线韩语 TTS 引擎（按优先级尝试；国内网络友好，均无需 API key）
+    // 在线韩语 TTS 引擎（百度优先：短词/单字语法词也稳定；有道对短词常 500 作备用）
     const ONLINE_TTS = [
-        { name: '有道', build: t => 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(t) + '&type=2' },
-        { name: '百度', build: t => 'https://fanyi.baidu.com/gettts?lan=kor&text=' + encodeURIComponent(t) + '&spd=3&source=web' }
+        { name: '百度', build: t => 'https://fanyi.baidu.com/gettts?lan=kor&text=' + encodeURIComponent(t) + '&spd=3&source=web' },
+        { name: '有道', build: t => 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(t) + '&type=2' }
     ];
 
     // 移动端判断（Android / iOS / 平板）
