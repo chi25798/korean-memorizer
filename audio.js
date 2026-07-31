@@ -74,19 +74,22 @@ const Audio = (() => {
         return hasKoreanVoice();
     }
 
-    // 常驻隐藏 audio 元素：安卓 WebView / 微信 X5 内核要求音频元素在 DOM 中才允许播放
-    let audioEl = null;
-    function ensureAudioEl() {
-        if (audioEl && audioEl.isConnected) return audioEl;
+    // 常驻隐藏 audio 元素池（每引擎一个）：安卓 WebView / 微信 X5 内核要求音频元素在 DOM 中才允许播放
+    let audioPool = [];
+    function ensurePool() {
+        if (audioPool.length) return audioPool;
         try {
-            audioEl = document.createElement('audio');
-            audioEl.preload = 'auto';
-            audioEl.style.display = 'none';
-            audioEl.setAttribute('playsinline', '');
-            audioEl.setAttribute('webkit-playsinline', '');
-            (document.body || document.documentElement).appendChild(audioEl);
+            audioPool = ONLINE_TTS.map(() => {
+                const a = document.createElement('audio');
+                a.preload = 'auto';
+                a.style.display = 'none';
+                a.setAttribute('playsinline', '');
+                a.setAttribute('webkit-playsinline', '');
+                (document.body || document.documentElement).appendChild(a);
+                return a;
+            });
         } catch (e) { /* 忽略 */ }
-        return audioEl;
+        return audioPool;
     }
 
     /**
@@ -116,47 +119,54 @@ const Audio = (() => {
     }
 
     /**
-     * 在线朗读：依次尝试各引擎，某个引擎真实出声（onplaying）即返回
+     * 在线朗读：所有引擎并行请求，谁先真实出声（onplaying）用谁，其余立即停掉
+     * 解决「某个引擎被浏览器拦截（如夸克 abort 有道）→ 串行等待切换」造成的延迟
      * @returns {Promise<boolean>}
      */
     function speakOnline(text) {
         const seq = ++onlineSeq;
         stopLocalSpeak();
+        const pool = ensurePool();
+        if (!pool.length) {
+            lastErr = '浏览器不支持 audio 元素';
+            return Promise.resolve(false);
+        }
         return new Promise((resolve) => {
-            const tryEngine = (i) => {
-                if (seq !== onlineSeq) { resolve(false); return; }   // 已被新的朗读打断
-                if (i >= ONLINE_TTS.length) { resolve(false); return; }
-                const eng = ONLINE_TTS[i];
-                const a = ensureAudioEl();
-                if (!a) { lastErr = '浏览器不支持 audio 元素'; tryEngine(i + 1); return; }
-                onlineAudio = a;
-                let settled = false;
-                const finish = (ok) => {
-                    if (settled) return;
-                    settled = true;
-                    resolve(ok);
+            let settled = false;
+            let failures = 0;
+            const elState = pool.map(() => ({ failed: false }));
+            const finish = (ok) => { if (settled) return; settled = true; resolve(ok); };
+            const noteFail = (idx, why) => {
+                if (elState[idx].failed) return;
+                elState[idx].failed = true;
+                failures++;
+                lastErr = ((ONLINE_TTS[idx] || {}).name || ('引擎' + idx)) + ': ' + (why || '失败');
+                if (failures >= pool.length && !settled) finish(false);
+            };
+            pool.forEach((a, idx) => {
+                const eng = ONLINE_TTS[idx];
+                if (!eng) return;
+                a.onerror = () => noteFail(idx, 'abort/加载失败');
+                a.onplaying = () => {
+                    if (settled) { try { a.pause(); } catch (e) { /* 忽略 */ } return; }
+                    finish(true);
+                    // 停掉其它引擎，避免重复出声
+                    pool.forEach((o, j) => {
+                        if (j !== idx) {
+                            try { o.pause(); o.removeAttribute('src'); o.load(); } catch (e) { /* 忽略 */ }
+                        }
+                    });
                 };
-                const fail = (why) => {
-                    if (settled) return;
-                    settled = true;
-                    lastErr = (eng.name + ': ' + (why || '加载失败'));
-                    try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* 忽略 */ }
-                    if (onlineAudio === a) onlineAudio = null;
-                    tryEngine(i + 1);
-                };
-                a.onerror = () => fail('加载失败');
                 a.onended = () => { if (onlineAudio === a) onlineAudio = null; };
-                a.onplaying = () => finish(true);
                 a.volume = 1;
                 a.muted = false;
                 a.src = eng.build(text);
                 a.load();
                 const p = a.play();
-                if (p && p.catch) p.catch((e) => fail(String(e && e.name || e)));
-                // 加载超时兜底（8 秒）
-                setTimeout(() => { if (!settled) fail('超时'); }, 8000);
-            };
-            tryEngine(0);
+                if (p && p.catch) p.catch((e) => noteFail(idx, String(e && e.name || e)));
+            });
+            // 兜底：5 秒内无人出声 → 失败
+            setTimeout(() => { if (!settled) finish(false); }, 5000);
         });
     }
 
@@ -177,10 +187,10 @@ const Audio = (() => {
 
     function stopOnlineSpeak() {
         onlineSeq++;
-        if (onlineAudio) {
-            try { onlineAudio.pause(); onlineAudio.removeAttribute('src'); onlineAudio.load(); } catch (e) { /* 忽略 */ }
-            onlineAudio = null;
-        }
+        audioPool.forEach((a) => {
+            try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* 忽略 */ }
+        });
+        onlineAudio = null;
     }
 
     // ===== 录音功能 =====

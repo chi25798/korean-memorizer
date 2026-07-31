@@ -2768,6 +2768,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
+const APP_VERSION = 'v30';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2780,6 +2781,8 @@ function syncTtsModeControl() {
   });
   const desc = $el('tts-engine-desc');
   if (desc && desc.textContent !== undefined) desc.textContent = ttsEngineDesc(m);
+  const ver = $el('app-version');
+  if (ver && ver.textContent !== undefined) ver.textContent = APP_VERSION;
 }
 function bindTtsMode() {
   const radios = document.querySelectorAll('input[name="tts-mode"]');

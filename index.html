@@ -14,6 +14,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="ink-theme.css">
+    <!-- 预热在线发音服务器连接，减少手机首次发音延迟 -->
+    <link rel="preconnect" href="https://dict.youdao.com">
+    <link rel="preconnect" href="https://fanyi.baidu.com">
 </head>
 <body>
     <div id="app">
@@ -483,6 +486,7 @@
                         </div>
                         <div class="me-actions">
                             <button class="btn-mini" id="tts-test">🔊 试听</button>
+                            <span class="me-hint">版本 <span id="app-version">—</span></span>
                         </div>
                     </div>
 
