@@ -321,13 +321,19 @@
                         <div class="plan-today-card plan-card-word">
                             <div class="ptc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 21V3.4"/><path d="M8.2 7.8h4.4M8.2 12.2h4.4M8.2 16.6h4.4"/><path d="M12.6 9.2c2.6-.5 4.3-1.8 5-4-2.6.1-4.3 1.4-5 4z"/></svg></div>
                             <div class="ptc-body">
-                                <div class="ptc-title">今日单词</div>
+                                <div class="ptc-title-row">
+                                    <span class="ptc-title">今日新学单词</span>
+                                    <span class="ptc-pct" id="plan-word-pct">0%</span>
+                                </div>
                                 <div class="ptc-progress">
                                     <span class="ptc-current" id="plan-word-done">0</span>
+                                    <span class="ptc-unit">个</span>
                                     <span class="ptc-sep">/</span>
                                     <span class="ptc-target" id="plan-word-target">0</span>
+                                    <span class="ptc-unit">个目标</span>
                                 </div>
                                 <div class="ptc-bar"><div class="ptc-bar-fill word-fill" id="plan-word-bar"></div></div>
+                                <div class="ptc-hint" id="plan-word-hint"></div>
                             </div>
                         </div>
                     </div>

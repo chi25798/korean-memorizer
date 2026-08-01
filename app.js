@@ -335,7 +335,10 @@ const DB = {
     },
 
     _todayKey() {
-        return new Date().toISOString().split('T')[0];
+        // 用本地日期（非 UTC），避免跨时区（如 GMT+8）在凌晨把"今天"算错一天
+        const d = new Date();
+        const p = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
     },
 
     logPlanActivity(type) {
@@ -370,7 +373,8 @@ const DB = {
         for (let i = days - 1; i >= 0; i--) {
             const d = new Date(today);
             d.setDate(d.getDate() - i);
-            const key = d.toISOString().split('T')[0];
+            const p = (n) => String(n).padStart(2, '0');
+            const key = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
             const log = (this.plan && this.plan.log[key]) || { newWords: 0, newTexts: 0 };
             const wordTarget = this.plan ? this.plan.dailyWords : 0;
             const textTarget = this.plan ? this.plan.dailyTexts : 0;
@@ -576,6 +580,22 @@ function renderPlanToday() {
 
     const wordPct = plan.wordTarget > 0 ? Math.min(100, plan.wordDone / plan.wordTarget * 100) : 0;
     document.getElementById('plan-word-bar').style.width = wordPct + '%';
+
+    const pctEl = document.getElementById('plan-word-pct');
+    if (pctEl) pctEl.textContent = Math.round(wordPct) + '%';
+    const hintEl = document.getElementById('plan-word-hint');
+    if (hintEl) {
+        if (!plan.enabled) {
+            hintEl.textContent = '计划追踪已关闭，开启后开始统计';
+            hintEl.className = 'ptc-hint status-off';
+        } else if (plan.wordTarget - plan.wordDone <= 0) {
+            hintEl.textContent = '✅ 已达成今日单词目标，太棒了！';
+            hintEl.className = 'ptc-hint status-done';
+        } else {
+            hintEl.textContent = `还差 ${plan.wordTarget - plan.wordDone} 个新词就完成今日目标`;
+            hintEl.className = 'ptc-hint status-pending';
+        }
+    }
 
     const statusEl = document.getElementById('plan-today-status');
     if (!plan.enabled) {
@@ -2791,7 +2811,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v39';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v40';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
