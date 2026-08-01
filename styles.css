@@ -186,7 +186,9 @@ body {
 .main-content {
     flex: 1;
     overflow-y: auto;
-    padding: 24px 36px;
+    /* 顶部/左右保持原样；底部留较大余白，避免最后一课（如第四册第35课）
+       在移动端被浏览器底栏遮挡、贴边不好看。影响所有页面。 */
+    padding: 24px 36px 64px;
 }
 
 .page {
