@@ -694,6 +694,19 @@ body { zoom: var(--ui-zoom, 1.1); }
 .tts-diag-out .fail { color: #e5484d; font-weight: 600; }
 .tts-diag-out .dim { color: #8a8f9c; }
 
+/* ===== 我的录音：逐条列表 ===== */
+.rec-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.rec-empty { padding: 14px 12px; text-align: center; color: #8a8f9c; font-size: 13px; background: #f6f7fb; border-radius: 10px; }
+.rec-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #f6f7fb; border: 1px solid #e4e7f0; border-radius: 10px; }
+.rec-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rec-item-word { font-family: var(--font-kai); font-size: 16px; font-weight: 600; color: #2b2b2b; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-item-sub { font-size: 12px; color: #8a8f9c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.rec-item-actions button { width: 36px; height: 36px; border-radius: 9px; border: 1px solid #e0e3ee; background: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .1s; }
+.rec-item-actions button:active { transform: scale(0.92); }
+.rec-play:hover { background: #e6f7f3; border-color: #4ECDC4; }
+.rec-del:hover { background: #ffe9ee; border-color: #FF6B9D; }
+
 .import-drop {
     border: 1.5px dashed rgba(50, 50, 60, 0.22);
     border-radius: 4px;

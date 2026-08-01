@@ -110,6 +110,18 @@ const Recordings = (() => {
         return cache.size;
     }
 
+    /** 列出全部录音的 wordId（用于「我的」页逐条管理） */
+    function listAll() {
+        return new Promise((resolve) => {
+            if (!db) { resolve([]); return; }
+            try {
+                const r = _store('readonly').getAllKeys();
+                r.onsuccess = () => resolve(r.result || []);
+                r.onerror = () => resolve([]);
+            } catch (e) { resolve([]); }
+        });
+    }
+
     // ===== 播放（三级回退：video → audio → Web Audio API） =====
     // 录音是 MediaRecorder 生成的 webm/mp4，夸克 video 元素可能不支持（TTS 的 MP3 能播）
     let playEl = null;        // video 元素
@@ -247,7 +259,7 @@ const Recordings = (() => {
     }
 
     return {
-        init, save, get, hasCached, remove, clear, count, play,
+        init, save, get, hasCached, remove, clear, count, listAll, play,
         isSupported, start, stopAndSave, abort, isRecording
     };
 })();

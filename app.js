@@ -1417,29 +1417,39 @@ function setupSpellCanvas() {
     if (!spellCanvas) return;
     spellCtx = spellCanvas.getContext('2d');
 
-    const posOf = (e) => {
+    // 坐标映射：用比例法，彻底消除 body zoom(1.1) / dpr 带来的位移
+    const getPos = (e) => {
         const r = spellCanvas.getBoundingClientRect();
-        return { x: e.clientX - r.left, y: e.clientY - r.top };
+        const x = (e.clientX - r.left) / r.width * spellCanvas.width;
+        const y = (e.clientY - r.top) / r.height * spellCanvas.height;
+        return { x, y };
     };
     const down = (e) => {
         e.preventDefault();
+        try { spellCanvas.setPointerCapture(e.pointerId); } catch (_) { /* 忽略 */ }
         spellDrawing = true;
         spellCurrentStroke = [];
-        const p = posOf(e);
-        spellCurrentStroke.push(p);
         spellCtx.beginPath();
+        const p = getPos(e);
+        spellCurrentStroke.push(p);
         spellCtx.moveTo(p.x, p.y);
     };
     const move = (e) => {
         if (!spellDrawing) return;
         e.preventDefault();
-        const p = posOf(e);
-        spellCurrentStroke.push(p);
-        spellCtx.lineTo(p.x, p.y);
-        spellCtx.stroke();
+        // 用 getCoalescedEvents 抓回系统合并掉的中间点，笔迹更顺滑、无延迟感
+        const evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [e];
+        for (const ev of evs) {
+            const p = getPos(ev);
+            spellCurrentStroke.push(p);
+            spellCtx.lineTo(p.x, p.y);
+            spellCtx.stroke();
+        }
     };
-    const up = () => {
+    const up = (e) => {
+        if (!spellDrawing) return;
         spellDrawing = false;
+        try { spellCanvas.releasePointerCapture(e.pointerId); } catch (_) { /* 忽略 */ }
         if (spellCurrentStroke && spellCurrentStroke.length) {
             spellStrokes.push(spellCurrentStroke);
         }
@@ -1447,8 +1457,10 @@ function setupSpellCanvas() {
         updateUndoBtn();
     };
 
-    spellCanvas.addEventListener('pointerdown', down);
-    spellCanvas.addEventListener('pointermove', move);
+    spellCanvas.addEventListener('pointerdown', down, { passive: false });
+    spellCanvas.addEventListener('pointermove', move, { passive: false });
+    spellCanvas.addEventListener('pointerup', up);
+    spellCanvas.addEventListener('pointercancel', up);
     window.addEventListener('pointerup', up);
 
     document.getElementById('spell-clear').addEventListener('click', clearSpellCanvas);
@@ -1459,13 +1471,19 @@ function setupSpellCanvas() {
     });
 }
 
-function redrawSpellCanvas() {
-    if (!spellCtx) return;
-    spellCtx.clearRect(0, 0, spellCanvas.clientWidth, spellCanvas.clientHeight);
-    spellCtx.lineWidth = 3.5;
+function applyStrokeStyle() {
+    if (!spellCtx || !spellCanvas) return;
+    const dpr = spellCanvas._dpr || 1;
+    spellCtx.lineWidth = 3.5 * dpr;
     spellCtx.lineCap = 'round';
     spellCtx.lineJoin = 'round';
     spellCtx.strokeStyle = '#2b2b2b';
+}
+
+function redrawSpellCanvas() {
+    if (!spellCtx) return;
+    spellCtx.clearRect(0, 0, spellCanvas.width, spellCanvas.height);
+    applyStrokeStyle();
     for (const stroke of spellStrokes) {
         if (!stroke.length) continue;
         spellCtx.beginPath();
@@ -1501,20 +1519,20 @@ function resizeSpellCanvas() {
     const dpr = window.devicePixelRatio || 1;
     const w = spellCanvas.clientWidth || 320;
     const h = spellCanvas.clientHeight || 220;
+    if (w < 2 || h < 2) return; // 尚未显示（隐藏态 clientWidth=0），跳过，等 showSpellCard 再调
     spellCanvas.width = Math.round(w * dpr);
     spellCanvas.height = Math.round(h * dpr);
-    spellCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    spellCtx.lineWidth = 3.5;
-    spellCtx.lineCap = 'round';
-    spellCtx.lineJoin = 'round';
-    spellCtx.strokeStyle = '#2b2b2b';
+    spellCanvas._dpr = dpr;
+    // 直接用内部像素坐标，配合 getPos 的比例映射，彻底规避 zoom/dpr 位移
+    spellCtx.setTransform(1, 0, 0, 1, 0, 0);
+    applyStrokeStyle();
 }
 
 function clearSpellCanvas() {
     if (!spellCtx) return;
     spellStrokes = [];
     spellCurrentStroke = null;
-    spellCtx.clearRect(0, 0, spellCanvas.clientWidth, spellCanvas.clientHeight);
+    spellCtx.clearRect(0, 0, spellCanvas.width, spellCanvas.height);
     updateUndoBtn();
 }
 
@@ -2773,7 +2791,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v38';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v39';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2875,6 +2893,7 @@ function initMePage() {
     renderProfileGrid('profile-grid');
     syncUiZoomControl();
     syncTtsModeControl();
+    refreshRecordings();
     const box = document.getElementById('me-lesson-reset');
     if (box) box.classList.add('hidden');
 }
@@ -3053,7 +3072,7 @@ function bindVocabRec(btn, wordId) {
             }
             recActiveWordId = null;
             recActiveBtn = null;
-            if (ok) { toast('录音已保存 ✓', 'success'); updateRecCount(); }
+            if (ok) { toast('录音已保存 ✓', 'success'); refreshRecordings(); }
             else toast('录音失败，请检查麦克风权限', 'error');
             return;
         }
@@ -3089,6 +3108,39 @@ function updateRecCount() {
     if (el && window.Recordings) el.textContent = Recordings.count();
 }
 
+// 「我的」页逐条录音列表（可播放 / 单独删除）
+function renderRecList() {
+    const listEl = $el('rec-list');
+    if (!listEl || !window.Recordings) return;
+    Recordings.listAll().then(ids => {
+        if (!ids || !ids.length) {
+            listEl.innerHTML = '<div class="rec-empty">还没有录音。去「词库」点 🎤 录一条吧。</div>';
+            return;
+        }
+        const items = ids.map(id => {
+            const w = (DB.words && DB.words.find(x => x.id === id)) || null;
+            const label = w ? w.korean : id;
+            const sub = w && w.chinese ? w.chinese : '';
+            return `<div class="rec-item" data-word-id="${escapeHtml(id)}">
+                <div class="rec-item-main">
+                    <span class="rec-item-word">${escapeHtml(label)}</span>
+                    ${sub ? `<span class="rec-item-sub">${escapeHtml(sub)}</span>` : ''}
+                </div>
+                <div class="rec-item-actions">
+                    <button class="rec-play" type="button" title="播放这条录音">🎧</button>
+                    <button class="rec-del" type="button" title="删除这条录音">🗑️</button>
+                </div>
+            </div>`;
+        }).join('');
+        listEl.innerHTML = items;
+    });
+}
+
+function refreshRecordings() {
+    updateRecCount();
+    renderRecList();
+}
+
 function init() {
     // 必须最先执行：在读取任何进度前，把本地旧 word id 迁移到规范 id
     safeRun('migrateWordIds', migrateLegacyWordIds);
@@ -3096,13 +3148,33 @@ function init() {
     DB.load();
     DB.loadPlan();
     safeRun('audio', () => Audio.init());
-    safeRun('recordings', () => { if (window.Recordings) Recordings.init().then(() => updateRecCount()); });
+    safeRun('recordings', () => { if (window.Recordings) Recordings.init().then(() => refreshRecordings()); });
     safeRun('recClear', () => {
         const rc = $el('rec-clear');
         if (rc) rc.addEventListener('click', async () => {
             if (!confirm('确定清除全部录音吗？此操作不可撤销。')) return;
             if (window.Recordings) { await Recordings.clear(); updateRecCount(); if (typeof renderVocabAll === 'function') renderVocabAll(); toast('已清除全部录音', 'success'); }
         });
+        // 逐条录音：播放 / 单独删除
+        const listEl = $el('rec-list');
+        if (listEl && window.Recordings) {
+            listEl.addEventListener('click', async (e) => {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+                const item = btn.closest('.rec-item');
+                const wordId = item && item.dataset.wordId;
+                if (!wordId) return;
+                if (btn.classList.contains('rec-del')) {
+                    if (!confirm('删除这条录音？')) return;
+                    await Recordings.remove(wordId);
+                    toast('已删除该录音', 'success');
+                    refreshRecordings();
+                    if (typeof renderVocabAll === 'function') renderVocabAll();
+                } else if (btn.classList.contains('rec-play')) {
+                    await Recordings.play(wordId);
+                }
+            });
+        }
     });
     // 先注册委托类事件，保证「我的」页按钮不受其它绑定失败影响
     safeRun('profileEvents', bindProfileEvents);
