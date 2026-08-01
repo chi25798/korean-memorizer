@@ -324,70 +324,6 @@ const Audio = (() => {
     let stream = null;
 
     /**
-     * 开始录音
-     * @returns {Promise<boolean>} 是否成功开始
-     */
-    async function startRecording() {
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    audioChunks.push(e.data);
-                }
-            };
-
-            mediaRecorder.start();
-            return true;
-        } catch (err) {
-            console.error('录音启动失败:', err);
-            return false;
-        }
-    }
-
-    /**
-     * 停止录音
-     * @returns {Promise<string>} 录音的 URL
-     */
-    function stopRecording() {
-        return new Promise((resolve) => {
-            if (!mediaRecorder) {
-                resolve(null);
-                return;
-            }
-
-            mediaRecorder.onstop = () => {
-                audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                if (audioUrl) {
-                    URL.revokeObjectURL(audioUrl);
-                }
-                audioUrl = URL.createObjectURL(audioBlob);
-                
-                // 关闭麦克风
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
-                
-                resolve(audioUrl);
-            };
-
-            mediaRecorder.stop();
-        });
-    }
-
-    /**
-     * 播放最近的录音
-     */
-    function playRecording() {
-        if (audioUrl) {
-            const audio = new window.Audio(audioUrl);
-            audio.play();
-        }
-    }
-
-    /**
      * 检查是否支持语音合成
      */
     function isTTSSupported() {
@@ -411,9 +347,6 @@ const Audio = (() => {
         getLastError,
         cleanTextForTTS,
         diagnose,
-        startRecording,
-        stopRecording,
-        playRecording,
         isTTSSupported,
         isRecordingSupported
     };

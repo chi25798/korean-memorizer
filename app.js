@@ -108,7 +108,6 @@ function migrateLegacyWordIds() {
 // ===== 数据管理 =====
 const DB = {
     words: [],
-    texts: [],
     stats: { learnedDates: [], streak: 0, lastStudyDate: null },
 
     load() {
@@ -118,23 +117,17 @@ const DB = {
         const fromOld = (!version || parseInt(version) < 3);
 
         const savedWords = localStorage.getItem(STORAGE_KEYS.words);
-        const savedTexts = localStorage.getItem(STORAGE_KEYS.texts);
 
         if (fromOld) {
             // 旧版本 / 首次打开：直接以内置数据初始化
             this.words = allWords().map(w => SRS.initWord(w));
-            this.texts = BUILTIN_TEXTS.map(t => SRS.initText(t));
         } else {
             // 升级：内容用内置（修正后的韩文/中文生效），进度字段（box/评分等）保留本地，用户自定义条目保留
             this.words = this._mergeItems(savedWords, allWords(), 'word');
-            this.texts = this._mergeItems(savedTexts, BUILTIN_TEXTS, 'text');
         }
 
         // 给单词分配 lessonId
         this._assignLessonIds();
-
-        // 给课文分配 lessonId
-        this._assignTextLessonIds();
 
         // 套用当前用户的单词编辑覆盖层（按用户隔离，不污染共享词库）
         this._applyWordEdits();
@@ -156,14 +149,6 @@ const DB = {
         allLessons().forEach(l => l.wordIds.forEach(wid => { map[wid] = l.id; }));
         this.words.forEach(w => {
             if (!w.lessonId && map[w.id]) w.lessonId = map[w.id];
-        });
-    },
-
-    _assignTextLessonIds() {
-        const map = {};
-        allLessons().forEach(l => { map[l.textId] = l.id; });
-        this.texts.forEach(t => {
-            if (!t.lessonId && map[t.id]) t.lessonId = map[t.id];
         });
     },
 
@@ -195,7 +180,7 @@ const DB = {
         const savedMap = new Map(saved.map(x => [x.id, x]));
         const progressFields = ['status', 'box', 'nextReview', 'lastReview', 'reviewCount', 'inWordbook'];
         const result = builtin.map(b => {
-            const base = kind === 'word' ? SRS.initWord(b) : SRS.initText(b);
+            const base = SRS.initWord(b);
             const s = savedMap.get(b.id);
             if (s) {
                 progressFields.forEach(f => { if (s[f] !== undefined) base[f] = s[f]; });
@@ -205,8 +190,6 @@ const DB = {
         // 追加用户自定义条目（不在内置中）
         saved.forEach(s => {
             if (!builtin.find(b => b.id === s.id)) {
-                // 课文：内置已清空时，不复活被删的内置课文（其 id 不以 'u' 开头，非真正自定义项）
-                if (kind === 'text' && !(s.id && typeof s.id === 'string' && s.id.startsWith('u'))) return;
                 result.push(s);
             }
         });
@@ -226,7 +209,6 @@ const DB = {
             return o;
         });
         localStorage.setItem(STORAGE_KEYS.words, JSON.stringify(outWords));
-        localStorage.setItem(STORAGE_KEYS.texts, JSON.stringify(this.texts));
         localStorage.setItem(STORAGE_KEYS.stats, JSON.stringify(this.stats));
     },
 
@@ -240,28 +222,15 @@ const DB = {
         return newWord;
     },
 
-    addText(title, sentences) {
-        const newText = SRS.initText({
-            id: 'u' + Date.now(),
-            title,
-            sentences
-        });
-        this.texts.push(newText);
-        this.save();
-        return newText;
-    },
-
     resetProgress() {
         this.words = SRS.resetAll(this.words);
-        this.texts = SRS.resetAllTexts(this.texts);
         this.stats = { learnedDates: [], streak: 0, lastStudyDate: null };
         this.save();
     },
 
-    // 清空所有单词和课文（保留设置、计划、每日一句与连续学习天数记录）
+    // 清空所有单词（保留设置、计划、每日一句与连续学习天数记录）
     clearAllWordsAndTexts() {
         this.words = [];
-        this.texts = [];
         this.save();
     },
 
@@ -292,30 +261,17 @@ const DB = {
     getLessons() {
         return allLessons().map(lesson => {
             const words = this.words.filter(w => w.lessonId === lesson.id);
-            const text = this.texts.find(t => t.id === lesson.textId);
             const wordStats = SRS.getStats(words);
-            const textLabel = text ? SRS.getNextReviewLabel(text) : '无课文';
-            const textDue = text && text.status !== 'new' && text.status !== 'mastered' && text.nextReview > 0 && text.nextReview <= Date.now();
             return {
                 ...lesson,
                 words,
-                text,
-                wordStats,
-                textLabel,
-                textDue,
-                hasDue: wordStats.reviewDue > 0 || textDue
+                wordStats
             };
         });
     },
 
     getWordsByLesson(lessonId) {
         return this.words.filter(w => w.lessonId === lessonId);
-    },
-
-    getTextByLesson(lessonId) {
-        const lesson = allLessons().find(l => l.id === lessonId);
-        if (!lesson) return null;
-        return this.texts.find(t => t.id === lesson.textId);
     },
 
     // ===== 计划数据 =====
@@ -426,13 +382,8 @@ function navigateTo(pageId) {
 // ===== 首页 =====
 function renderHome() {
     const stats = SRS.getStats(DB.words);
-    const textStats = SRS.getTextStats(DB.texts);
     $el('stat-total').textContent = stats.total;
     $el('stat-learned').textContent = stats.learned;
-
-    // 课文统计
-    $el('stat-texts-total').textContent = textStats.total;
-    $el('stat-texts-learned').textContent = textStats.learned;
 
     document.getElementById('streak-days').textContent = DB.stats.streak || 0;
 
@@ -445,9 +396,7 @@ function renderHome() {
         wordReviewBadge.style.color = 'var(--pink-deep)';
     }
 
-    $el('text-stats-text').textContent = `${textStats.learned} / ${textStats.total} 已学`;
-
-    const totalReviewDue = stats.reviewDue + textStats.reviewDue;
+    const totalReviewDue = stats.reviewDue;
     const reviewDueText = totalReviewDue > 0
         ? `${totalReviewDue} 项待复习`
         : '暂无待复习';
@@ -1235,39 +1184,6 @@ function updateSpellCount() {
 }
 
 // --- 课文复习 ---
-function startTextReview() {
-    const dueTexts = SRS.getDueTexts(DB.texts);
-    if (dueTexts.length === 0) {
-        toast('没有待复习的课文 🎉');
-        return;
-    }
-
-    document.querySelector('.review-modes').classList.add('hidden');
-    $el('text-review-session').classList.remove('hidden');
-
-    const listEl = $el('text-review-list');
-    listEl.innerHTML = '';
-
-    dueTexts.forEach(text => {
-        const lesson = allLessons().find(l => l.textId === text.id);
-        const item = document.createElement('div');
-        item.className = 'text-review-item';
-        item.innerHTML = `
-            <div class="tri-title">${lesson ? lesson.title : text.title}</div>
-            <div class="tri-info">
-                <span>📝 ${text.sentences.length} 句</span>
-                <span>复习 ${text.reviewCount || 0} 次</span>
-                <span class="tri-due">待复习</span>
-            </div>
-        `;
-        item.addEventListener('click', () => {
-            navigateTo('texts');
-            setTimeout(() => openTextStudy(text), 100);
-        });
-        listEl.appendChild(item);
-    });
-}
-
 function backToReviewModes() {
     initReviewPage();
 }
@@ -1576,275 +1492,6 @@ function setSpellMode(mode) {
     showSpellCard();
 }
 
-// ===== 背课文页 =====
-let currentText = null;
-let textSentenceIndex = 0;
-let currentTextMode = 'full';
-let hideLang = 'zh'; // 单句模式中遮住的语言：'zh' 或 'ko'
-let sentenceRevealed = false;
-
-function initTextsPage() {
-    $el('text-lesson-list').classList.remove('hidden');
-    $el('text-study').classList.add('hidden');
-    renderTextLessonList();
-}
-
-function renderTextLessonList() {
-    const lessons = DB.getLessons();
-    const listEl = $el('text-lesson-list');
-    listEl.innerHTML = '';
-
-    if (lessons.length === 0) {
-        listEl.innerHTML = '<div class="empty-hint">📭 还没有课文，去「管理」页添加或导入吧！</div>';
-        return;
-    }
-
-    lessons.forEach(lesson => {
-        const text = lesson.text;
-        if (!text) return;
-
-        let badge = '';
-        if (lesson.textDue) {
-            badge = `<span class="lesson-badge lesson-badge-due">待复习</span>`;
-        } else if (text.status === 'mastered') {
-            badge = `<span class="lesson-badge lesson-badge-done">已掌握</span>`;
-        } else if (text.status === 'new') {
-            badge = `<span class="lesson-badge lesson-badge-new">未开始</span>`;
-        } else {
-            badge = `<span class="lesson-badge lesson-badge-learning">${lesson.textLabel}</span>`;
-        }
-
-        const preview = text.sentences.map(s => s.ko).join(' ').substring(0, 80) + '...';
-
-        const card = document.createElement('div');
-        card.className = 'lesson-card';
-        card.innerHTML = `
-            <div class="lesson-card-header">
-                <div class="lesson-card-title">${lesson.title}</div>
-                ${badge}
-            </div>
-            <div class="lesson-card-preview">${preview}</div>
-            <div class="lesson-card-info">
-                <span>📝 ${text.sentences.length} 句</span>
-                <span>📊 ${lesson.textLabel}</span>
-                <span>${text.reviewCount || 0} 次复习</span>
-            </div>
-        `;
-        card.addEventListener('click', () => openTextStudy(text));
-        listEl.appendChild(card);
-    });
-}
-
-function openTextStudy(text) {
-    currentText = text;
-    textSentenceIndex = 0;
-
-    // 找到对应的 lesson 标题
-    const lesson = allLessons().find(l => l.textId === text.id);
-    const title = lesson ? lesson.title : text.title;
-
-    $el('text-lesson-list').classList.add('hidden');
-    $el('text-study').classList.remove('hidden');
-    $el('text-study-title').textContent = title;
-
-    // 隐藏 SRS 评分区域
-    $el('text-srs-rating').classList.add('hidden');
-
-    // 默认进入通篇背诵
-    switchTextMode('full');
-}
-
-// 课文 SRS 评分
-function showTextSRSRating() {
-    $el('text-srs-rating').classList.remove('hidden');
-    $el('text-srs-rating').scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
-function rateText(rate) {
-    if (!currentText) return;
-    const wasNew = currentText.status === 'new';
-    SRS.review(currentText, rate);
-    if (wasNew) DB.logPlanActivity('text');
-    DB.save();
-    DB.recordStudy();
-    $el('text-srs-rating').classList.add('hidden');
-    const nextLabel = SRS.getNextReviewLabel(currentText);
-    toast(`课文已记录！下次复习：${nextLabel}`, 'success');
-    setTimeout(() => initTextsPage(), 1500);
-}
-
-function finishTextStudy() {
-    toast('课文学习完成！请给自己评分', 'success');
-    showTextSRSRating();
-}
-
-function switchTextMode(mode) {
-    currentTextMode = mode;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.textMode === mode));
-    document.querySelectorAll('.text-mode-panel').forEach(p => p.classList.remove('active'));
-
-    switch (mode) {
-        case 'full':
-            $el('text-full').classList.add('active');
-            renderFullRecite();
-            break;
-        case 'sentence':
-            $el('text-sentence').classList.add('active');
-            textSentenceIndex = 0;
-            sentenceRevealed = false;
-            renderSentenceRecite();
-            break;
-        case 'record':
-            $el('text-record').classList.add('active');
-            textSentenceIndex = 0;
-            renderRecord();
-            break;
-    }
-}
-
-// --- 通篇背诵模式 ---
-function renderFullRecite() {
-    if (!currentText) return;
-    const listEl = $el('full-recite-list');
-    listEl.innerHTML = '';
-
-    const showKo = $el('toggle-ko').checked;
-    const showZh = $el('toggle-zh').checked;
-
-    currentText.sentences.forEach((s, i) => {
-        const item = document.createElement('div');
-        item.className = 'recite-sentence-item';
-        item.innerHTML = `
-            <div class="recite-sentence-num">${i + 1}</div>
-            <div class="recite-sentence-content">
-                ${showKo ? `<div class="recite-sentence-ko">${s.ko}</div>` : ''}
-                ${showZh ? `<div class="recite-sentence-zh">${s.zh}</div>` : ''}
-                ${!showKo && !showZh ? '<div class="recite-sentence-zh" style="opacity:0.5">（已隐藏全部文本）</div>' : ''}
-            </div>
-            <button class="recite-sentence-speak" data-sentence-index="${i}">🔊</button>
-        `;
-        listEl.appendChild(item);
-    });
-
-    // 绑定每句朗读按钮
-    listEl.querySelectorAll('.recite-sentence-speak').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const idx = parseInt(this.dataset.sentenceIndex);
-            Audio.speak(currentText.sentences[idx].ko, 0.8);
-        });
-    });
-}
-
-function fullReciteSpeakAll() {
-    if (!currentText) return;
-    const fullText = currentText.sentences.map(s => s.ko).join('. ');
-    Audio.speak(fullText, 0.8);
-}
-
-// --- 单句背诵模式 ---
-function renderSentenceRecite() {
-    if (!currentText) return;
-    const sentence = currentText.sentences[textSentenceIndex];
-    const visibleEl = $el('sentence-visible');
-    const hiddenArea = $el('sentence-hidden-area');
-    const revealedEl = $el('sentence-revealed');
-
-    $el('sentence-progress').textContent = `第 ${textSentenceIndex + 1} / ${currentText.sentences.length} 句`;
-
-    // 显示可见的语言
-    if (hideLang === 'ko') {
-        // 遮住韩语，显示汉语
-        visibleEl.innerHTML = `<div class="sentence-visible visible-zh">${sentence.zh}</div>`;
-        revealedEl.innerHTML = `<div class="sentence-revealed-text reveal-ko">${sentence.ko}</div>`;
-    } else {
-        // 遮住汉语，显示韩语
-        visibleEl.innerHTML = `<div class="sentence-visible visible-ko">${sentence.ko}</div>`;
-        revealedEl.innerHTML = `<div class="sentence-revealed-text reveal-zh">${sentence.zh}</div>`;
-    }
-
-    // 重置为未显示答案状态
-    hiddenArea.classList.remove('hidden');
-    revealedEl.classList.add('hidden');
-    sentenceRevealed = false;
-
-    // 更新上一句按钮状态
-    const prevBtn = $el('sentence-prev');
-    prevBtn.disabled = textSentenceIndex === 0;
-}
-
-function revealSentence() {
-    $el('sentence-hidden-area').classList.add('hidden');
-    $el('sentence-revealed').classList.remove('hidden');
-    sentenceRevealed = true;
-}
-
-function sentencePrev() {
-    if (textSentenceIndex > 0) {
-        textSentenceIndex--;
-        renderSentenceRecite();
-    }
-}
-
-function sentenceNext() {
-    textSentenceIndex++;
-    if (textSentenceIndex >= currentText.sentences.length) {
-        toast('单句背诵完成！🎉', 'success');
-        finishTextStudy();
-        return;
-    }
-    renderSentenceRecite();
-}
-
-// --- 录音对比模式 ---
-let isRecording = false;
-
-function renderRecord() {
-    if (!currentText) return;
-    const sentence = currentText.sentences[textSentenceIndex];
-    $el('record-sentence').textContent = sentence.ko;
-    $el('record-translation').textContent = sentence.zh;
-    $el('record-progress').textContent = `第 ${textSentenceIndex + 1} / ${currentText.sentences.length} 句`;
-    $el('record-play').classList.add('hidden');
-    $el('record-start').textContent = '🎤 开始录音';
-    $el('record-start').classList.remove('recording');
-    isRecording = false;
-}
-
-async function toggleRecord() {
-    const btn = $el('record-start');
-    
-    if (!isRecording) {
-        const success = await Audio.startRecording();
-        if (success) {
-            isRecording = true;
-            btn.textContent = '⏹ 停止录音';
-            btn.classList.add('recording');
-        } else {
-            toast('无法访问麦克风，请检查权限设置', 'error');
-        }
-    } else {
-        await Audio.stopRecording();
-        isRecording = false;
-        btn.textContent = '🎤 重新录音';
-        btn.classList.remove('recording');
-        $el('record-play').classList.remove('hidden');
-    }
-}
-
-function playRecorded() {
-    Audio.playRecording();
-}
-
-function nextRecord() {
-    textSentenceIndex++;
-    if (textSentenceIndex >= currentText.sentences.length) {
-        toast('录音对比完成！🎉', 'success');
-        finishTextStudy();
-        return;
-    }
-    renderRecord();
-}
-
 // ===== 生词本页 =====
 function renderWordbook() {
     const wordbookWords = DB.words.filter(w => w.inWordbook);
@@ -1899,7 +1546,6 @@ function renderWordbook() {
 // ===== 管理页 =====
 function initManagePage() {
     $el('manage-word-count').textContent = DB.words.length;
-    $el('manage-text-count').textContent = DB.texts.length;
 }
 
 function showModal(id) {
@@ -1974,7 +1620,6 @@ function handleImport() {
 function handleExport() {
     const data = {
         words: DB.words,
-        texts: DB.texts,
         exportDate: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1987,39 +1632,6 @@ function handleExport() {
     toast('数据已导出！', 'success');
 }
 
-function handleAddText() {
-    const title = $el('add-text-title').value.trim();
-    const content = $el('add-text-content').value.trim();
-
-    if (!title || !content) {
-        toast('请填写标题和内容', 'error');
-        return;
-    }
-
-    const lines = content.split('\n');
-    const sentences = [];
-    lines.forEach(line => {
-        const parts = line.split('|').map(p => p.trim());
-        if (parts.length >= 2) {
-            sentences.push({ ko: parts[0], zh: parts[1] });
-        }
-    });
-
-    if (sentences.length === 0) {
-        toast('请按格式输入课文内容', 'error');
-        return;
-    }
-
-    DB.addText(title, sentences);
-
-    $el('add-text-title').value = '';
-    $el('add-text-content').value = '';
-
-    hideModal('modal-add-text');
-    initManagePage();
-    toast('课文添加成功！', 'success');
-}
-
 function handleResetProgress() {
     if (confirm('确定要重置所有学习进度吗？此操作不可撤销！')) {
         DB.resetProgress();
@@ -2029,11 +1641,11 @@ function handleResetProgress() {
 }
 
 function handleClearAll() {
-    if (!confirm('确定要清空所有单词和课文吗？\n\n此操作不可撤销！\n清空后你可以重新添加或导入新的单词和课文。')) {
+    if (!confirm('确定要清空所有单词吗？\n\n此操作不可撤销！\n清空后你可以重新添加或导入新的单词。')) {
         return;
     }
     DB.clearAllWordsAndTexts();
-    toast('已清空所有单词和课文', 'success');
+    toast('已清空所有单词', 'success');
     renderHome();
     initManagePage();
 }
@@ -2795,7 +2407,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v42';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v43';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';

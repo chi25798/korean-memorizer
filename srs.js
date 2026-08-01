@@ -94,20 +94,6 @@ const SRS = (() => {
     }
 
     /**
-     * 获取需要复习的课文（到期或过期）
-     * @param {Array} texts - 所有课文
-     * @returns {Array} 需要复习的课文
-     */
-    function getDueTexts(texts) {
-        const now = Date.now();
-        return texts.filter(t => {
-            if (t.status === 'new') return false;
-            if (t.status === 'mastered') return false;
-            return t.nextReview > 0 && t.nextReview <= now;
-        });
-    }
-
-    /**
      * 获取新单词（还没开始学的）
      * @param {Array} words - 所有单词
      * @param {number} limit - 数量限制
@@ -133,22 +119,6 @@ const SRS = (() => {
             lastReview: 0,
             reviewCount: 0,
             inWordbook: false
-        };
-    }
-
-    /**
-     * 初始化一个新课文的 SRS 状态
-     * @param {Object} text - 原始课文
-     * @returns {Object} 带SRS状态的课文
-     */
-    function initText(text) {
-        return {
-            ...text,
-            status: 'new',
-            box: 0,
-            nextReview: 0,
-            lastReview: 0,
-            reviewCount: 0
         };
     }
 
@@ -180,21 +150,6 @@ const SRS = (() => {
     }
 
     /**
-     * 获取课文统计信息
-     * @param {Array} texts
-     * @returns {Object}
-     */
-    function getTextStats(texts) {
-        const total = texts.length;
-        const learned = texts.filter(t => t.status !== 'new').length;
-        const reviewDue = getDueTexts(texts).length;
-        const mastered = texts.filter(t => t.status === 'mastered').length;
-        const learning = texts.filter(t => t.status === 'learning' || t.status === 'reviewing').length;
-
-        return { total, learned, reviewDue, mastered, learning };
-    }
-
-    /**
      * 重置所有单词进度
      * @param {Array} words 
      * @returns {Array}
@@ -211,35 +166,15 @@ const SRS = (() => {
         }));
     }
 
-    /**
-     * 重置所有课文进度
-     * @param {Array} texts
-     * @returns {Array}
-     */
-    function resetAllTexts(texts) {
-        return texts.map(t => ({
-            ...t,
-            status: 'new',
-            box: 0,
-            nextReview: 0,
-            lastReview: 0,
-            reviewCount: 0
-        }));
-    }
-
     return {
         INTERVALS,
         INTERVAL_LABELS,
         review,
         getDueWords,
-        getDueTexts,
         getNewWords,
         initWord,
-        initText,
         getNextReviewLabel,
         getStats,
-        getTextStats,
-        resetAll,
-        resetAllTexts
+        resetAll
     };
 })();
