@@ -142,10 +142,40 @@ const Audio = (() => {
      * wordId 可选 —— 传了会先查内存缓存（同步），有录音才异步播放；
      * 无录音时直接走 TTS，不引入异步等待，保留移动端手势栈。
      */
+    // 本地发音包：优先播放预下载的 audio/<wordId>.mp3
+    // 这样即使手机没有韩语语音包、在线 TTS 被墙/超时，也能稳定离线发音。
+    const AUDIO_BASE = 'audio/';
+    function playLocalAudio(wordId, rate) {
+        return new Promise((resolve) => {
+            if (!wordId) { resolve(false); return; }
+            const url = AUDIO_BASE + encodeURIComponent(wordId) + '.mp3';
+            const a = ensureAudioEl();
+            if (!a) { resolve(false); return; }
+            let settled = false;
+            const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+            a.onplaying = () => finish(true);
+            a.onerror = () => finish(false);
+            a.volume = 1; a.muted = false;
+            try { a.playbackRate = rate || 1; } catch (e) { /* 忽略 */ }
+            a.src = url; a.load();
+            const p = a.play();
+            if (p && p.then) p.then(() => setTimeout(() => { if (!settled) finish(true); }, 300)).catch(() => finish(false));
+            // 3.5s 内没出声（文件缺失/被拦截）→ 视为失败，回退 TTS
+            setTimeout(() => finish(false), 3500);
+        });
+    }
+
     async function speak(text, rate = 0.9, wordId = null) {
         if (wordId && window.Recordings && Recordings.hasCached(wordId)) {
             try {
                 const ok = await Recordings.play(wordId);
+                if (ok) return true;
+            } catch (e) { /* 忽略，回退 TTS */ }
+        }
+        // 优先用本地发音包（离线可靠）
+        if (wordId) {
+            try {
+                const ok = await playLocalAudio(wordId, rate);
                 if (ok) return true;
             } catch (e) { /* 忽略，回退 TTS */ }
         }

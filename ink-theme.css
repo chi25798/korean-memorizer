@@ -108,27 +108,22 @@ body::after {
 /* ===== 侧边栏：宣纸卷轴 ===== */
 .sidebar {
     background: var(--sidebar-bg);
-    border-right: 1px solid var(--ink-line);
-    box-shadow: 8px 0 26px -22px rgba(60, 55, 45, 0.5);
+    border-right: none;
+    border-bottom: 1px solid var(--ink-line);
+    box-shadow: 0 8px 26px -22px rgba(60, 55, 45, 0.5);
     overflow: hidden;
+    flex-direction: row;
+    align-items: center;
+    width: auto;
 }
 
 .sidebar::before {
-    background:
-        var(--far-mountain) bottom center / 100% 132px no-repeat,
-        var(--paper-grain);
-    opacity: 0.95;
-    mix-blend-mode: multiply;
+    display: none;
 }
 
 /* 卷轴右缘的一道淡墨 */
 .sidebar::after {
-    content: '';
-    position: absolute;
-    top: 0; bottom: 0; right: 0;
-    width: 12px;
-    background: linear-gradient(90deg, transparent, rgba(60, 55, 45, 0.07));
-    pointer-events: none;
+    display: none;
 }
 
 /* ===== 印章 Logo ===== */
@@ -138,7 +133,7 @@ body::after {
     font-size: 21px;
     font-weight: 600;
     letter-spacing: 0.18em;
-    padding-bottom: 22px;
+    padding: 0 12px 0 4px;
     gap: 12px;
 }
 
@@ -159,11 +154,7 @@ body::after {
 
 /* logo 下方一道墨笔横扫 */
 .nav-list::before {
-    content: '';
-    display: block;
-    height: 1px;
-    margin: 0 24px 14px;
-    background: linear-gradient(90deg, rgba(50, 50, 60, 0.30), rgba(50, 50, 60, 0.06) 72%, transparent);
+    display: none;
 }
 
 /* ===== 导航条目 ===== */
@@ -189,11 +180,15 @@ body::after {
 
 /* 选中：朱砂细条 */
 .nav-item.active::before {
-    width: 3px;
-    height: 20px;
+    left: 50%;
+    top: auto;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: 64%;
+    height: 3px;
     background: var(--seal);
-    border-radius: 0 2px 2px 0;
-    opacity: 0.85;
+    border-radius: 2px 2px 0 0;
+    opacity: 0.9;
 }
 
 .nav-icon {
@@ -213,7 +208,7 @@ body::after {
 .nav-item.active .nav-icon { color: var(--seal); }
 
 /* ===== 侧栏页脚 ===== */
-.nav-footer { position: relative; z-index: 1; }
+.nav-footer { position: relative; z-index: 1; margin-left: auto; display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 
 .profile-chip {
     background: rgba(255, 253, 248, 0.72);
@@ -639,10 +634,11 @@ body::after {
     border-color: transparent;
     box-shadow: 0 2px 10px var(--seal-soft);
 }
-.spell-canvas-area { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.spell-canvas-area { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 .spell-canvas {
     width: 100%;
-    height: 220px;
+    /* 响应式高度：横屏平板高度有限时自适应，且不溢出可视区 */
+    height: clamp(200px, 42vh, 360px);
     background:
         repeating-linear-gradient(0deg, rgba(60, 56, 50, 0.035) 0 27px, rgba(60, 56, 50, 0.07) 27px 28px),
         var(--xuan-2);
@@ -651,7 +647,8 @@ body::after {
     touch-action: none;
     cursor: crosshair;
 }
-.spell-canvas-tools { display: flex; gap: 12px; }
+/* 工具栏置于画布上方，确保平板横屏时撤销/清屏/确认始终可见 */
+.spell-canvas-tools { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .btn-clear-canvas, .btn-reveal-canvas {
     font-family: var(--font-kai);
     font-size: 15px;
@@ -677,7 +674,7 @@ body::after {
     background: linear-gradient(135deg, var(--pink-soft), var(--blue-soft));
 }
 .btn-reveal-canvas:hover { filter: brightness(1.05); }
-.spell-self-rate { display: flex; gap: 12px; margin-top: 4px; }
+.spell-self-rate { display: flex; gap: 12px; margin-top: 4px; justify-content: center; }
 .btn-self-rate {
     font-family: var(--font-kai);
     font-size: 15px;

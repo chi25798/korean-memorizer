@@ -385,7 +385,8 @@ function renderHome() {
     $el('stat-total').textContent = stats.total;
     $el('stat-learned').textContent = stats.learned;
 
-    document.getElementById('streak-days').textContent = DB.stats.streak || 0;
+    const _sd = document.getElementById('streak-days');
+    if (_sd) _sd.textContent = DB.stats.streak || 0;
 
     // 双核心入口的统计信息
     $el('word-stats-text').textContent = `${stats.learned} / ${stats.total} 已学`;
@@ -1140,6 +1141,7 @@ let flashIndex = 0;
 let spellQueue = [];
 let spellIndex = 0;
 let spellMode = 'input';                 // 'input' = 输入法模式；'canvas' = 手写板自评模式
+let spellPromptMode = 'both';            // 拼写提示方式：'audio'=听发音 / 'text'=看中文 / 'both'=两者
 let spellCanvas = null, spellCtx = null, spellDrawing = false;
 let spellStrokes = [];                    // 已完成的笔画（每笔 = [{x,y}...]，CSS 像素坐标）
 let spellCurrentStroke = null;            // 正在书写的当前笔
@@ -1163,6 +1165,15 @@ function initReviewPage() {
         sel.onclick = (e) => { if (e) e.stopPropagation(); };
     }
     updateSpellCount();
+
+    // 读取并同步拼写提示方式（持久化到 localStorage）
+    const savedPrompt = localStorage.getItem('km_spell_prompt');
+    if (savedPrompt === 'audio' || savedPrompt === 'text' || savedPrompt === 'both') {
+        spellPromptMode = savedPrompt;
+    }
+    document.querySelectorAll('.spell-prompt-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.prompt === spellPromptMode);
+    });
 
     // 显示模式选择，隐藏练习界面
     document.querySelector('.review-modes').classList.remove('hidden');
@@ -1279,6 +1290,7 @@ function showSpellCard() {
     document.getElementById('spell-chinese').textContent = word.chinese;
     document.getElementById('spell-input').value = '';
     document.getElementById('spell-input').focus();
+    applySpellPrompt(word);   // 按用户选择的提示方式显示中文/播放发音
 
     // 两种模式共用：先重置结果 / 自评区
     document.getElementById('spell-result').classList.add('hidden');
@@ -1302,6 +1314,27 @@ function showSpellCard() {
         document.getElementById('spell-submit').classList.remove('hidden');
         document.getElementById('spell-input-area').classList.remove('hidden');
         document.getElementById('spell-canvas-area').classList.add('hidden');
+    }
+}
+
+// 按用户选择的提示方式显示中文 / 播放发音
+function applySpellPrompt(word) {
+    if (!word) return;
+    const zh = document.getElementById('spell-chinese');
+    const sp = document.getElementById('spell-speak');
+    if (spellPromptMode === 'text') {
+        // 看中文：隐藏听音按钮
+        zh.classList.remove('hidden');
+        sp.classList.add('hidden');
+    } else if (spellPromptMode === 'audio') {
+        // 听发音：隐藏中文，自动朗读
+        zh.classList.add('hidden');
+        sp.classList.remove('hidden');
+        Audio.speak(word.korean, 0.9, word.id);
+    } else {
+        // 两者都有：中文 + 听音按钮
+        zh.classList.remove('hidden');
+        sp.classList.remove('hidden');
     }
 }
 
@@ -1614,6 +1647,7 @@ function handleImport() {
     document.getElementById('import-textarea').value = '';
     hideModal('modal-import');
     initManagePage();
+    markVocabDirty();   // 导入新词后，下次进入词库整体重建
     toast(`成功导入 ${count} 个单词！`, 'success');
 }
 
@@ -1727,6 +1761,17 @@ function bindEvents() {
         const tab = e.target.closest('.spell-mode-tab');
         if (tab) setSpellMode(tab.dataset.spellMode);
     });
+    // 拼写提示方式切换（听发音 / 看中文 / 两者）
+    document.getElementById('spell-prompt-tabs').addEventListener('click', (e) => {
+        const tab = e.target.closest('.spell-prompt-tab');
+        if (!tab) return;
+        spellPromptMode = tab.dataset.prompt;
+        localStorage.setItem('km_spell_prompt', spellPromptMode);
+        document.querySelectorAll('.spell-prompt-tab').forEach(t => t.classList.toggle('active', t === tab));
+        // 若正在拼写中，立即套用新提示方式
+        const w = spellQueue[spellIndex];
+        if (w) applySpellPrompt(w);
+    });
     setupSpellCanvas();
 
     document.getElementById('spell-input').addEventListener('keydown', (e) => {
@@ -1835,14 +1880,31 @@ function bindProfileEvents() {
 
 // ===== 词库（按册/课展示全部单词）=====
 let vocabFilter = '';
+let vocabBuilt = false;   // 词库 DOM 是否已构建（用于跳过重复重建，消除点词库卡顿）
+let vocabDirty = true;    // 数据/进度是否已变动，需要下次进入时重建
 
 function initVocabPage() {
     vocabFilter = '';
     const si = document.getElementById('vocab-search-input');
     if (si) si.value = '';
+    // 词库列表点击：事件委托只挂一次（覆盖全部行 + 折叠）
+    if (!vocabListDelegated) {
+        const listEl = document.getElementById('vocab-word-list');
+        if (listEl) { listEl.addEventListener('click', onVocabListClick); vocabListDelegated = true; }
+    }
+    // 已渲染且数据未变：直接复用现有 DOM，仅恢复「未过滤」显示（瞬间打开，无卡顿）
+    if (vocabBuilt && !vocabDirty) {
+        applyVocabFilter();
+        return;
+    }
     renderVocabSidebar();
     renderVocabAll();
+    vocabBuilt = true;
+    vocabDirty = false;
 }
+
+// 数据变动后标脏，下次进入词库时再整体重建（避免编辑/删除时频繁全量重绘）
+function markVocabDirty() { vocabDirty = true; }
 
 // 计算某课属于哪个「分组」（册号 或 书名），返回 {key,label,sort,isNum}
 function lessonGroupInfo(l) {
@@ -1935,110 +1997,117 @@ function isCustomWord(w) {
 }
 
 // 右侧：把所有册/课的所有单词一次性列出（搜索时筛选）
+// 词库列表：高性能渲染
+//  - 一次性按 lessonId 建索引（O(n)），避免 132 课 × 3148 词 的全量 filter
+//  - 整页用单个 HTML 字符串一次性 innerHTML（不再 3148 次 createElement + 每按钮挂监听）
+//  - 点击改用事件委托（1 个监听器覆盖全部行）
 function renderVocabAll() {
     const header = document.getElementById('vocab-main-header');
     const listEl = document.getElementById('vocab-word-list');
     if (!header || !listEl) return;
 
-    const groups = groupLessonsByVolume();
-    const f = vocabFilter.trim().toLowerCase();
+    // 一次性把全部单词按 lessonId 归类（O(n)）
+    const byLesson = {};
+    for (let i = 0; i < DB.words.length; i++) {
+        const w = DB.words[i];
+        if (!w.lessonId) continue;
+        (byLesson[w.lessonId] || (byLesson[w.lessonId] = [])).push(w);
+    }
 
+    const groups = groupLessonsByVolume();
+    let html = '';
     let totalShown = 0;
-    const frag = document.createDocumentFragment();
 
     groups.forEach(g => {
-        const volBlock = document.createElement('div');
-        volBlock.className = 'vocab-volume-block';
-        const volHead = document.createElement('div');
-        volHead.className = 'vocab-volume-head';
-        volHead.setAttribute('data-vol-toggle', g.key);
-        volHead.innerHTML = `<span class="vcaret">▾</span><span class="vvt-label">${escapeHtml(g.label)}</span><span class="vvol-count">${g.lessons.length} 课</span>`;
-        volBlock.appendChild(volHead);
-        const volBody = document.createElement('div');
-        volBody.className = 'vocab-volume-body';
+        let volInner = '';
         g.lessons.forEach(l => {
-            const words = DB.getWordsByLesson(l.id);
-            const filtered = f
-                ? words.filter(w => (w.korean || '').toLowerCase().includes(f) || (w.chinese || '').toLowerCase().includes(f) || (w.pronunciation || '').toLowerCase().includes(f))
-                : words;
-            if (filtered.length === 0) return; // 搜索无匹配则隐藏该课
-            totalShown += filtered.length;
-
-            const section = document.createElement('div');
-            section.className = 'vocab-lesson-section';
-            section.id = 'vocab-lesson-' + l.id;
-
-            const head = document.createElement('div');
-            head.className = 'vocab-lesson-section-head collapsible';
-            head.setAttribute('data-lesson-toggle', l.id);
-            head.innerHTML = `<span class="vcaret">▾</span><span class="vls-title">${l.title}</span><span class="vls-count">${filtered.length} 词</span>`;
-            section.appendChild(head);
-
-            const rows = document.createElement('div');
-            rows.className = 'vocab-lesson-rows';
-            filtered.forEach(w => {
-                const row = document.createElement('div');
+            const words = byLesson[l.id];
+            if (!words || !words.length) return;
+            totalShown += words.length;
+            const rows = words.map(w => {
                 const edited = (typeof window.WordEdits !== 'undefined') && window.WordEdits.has(w.id);
-                row.className = 'vocab-word-row' + (edited ? ' is-edited' : '');
                 const hasExample = w.exampleKo || w.exampleZh;
                 const isCustom = isCustomWord(w);
                 const hasRec = (typeof window.Recordings !== 'undefined') && Recordings.hasCached(w.id);
-                row.innerHTML = `
-                    <button class="vocab-speak" title="朗读">🔊</button>
-                    <button class="vocab-rec${hasRec ? ' has-rec' : ''}" data-vrec="${w.id}" title="${hasRec ? '播放录音（再次点击重录）' : '点击录音'}">🎤</button>
-                    <button class="vocab-word-edit" data-vwedit="${w.id}" title="修改单词 / 释义">✎</button>
-                    <div class="vocab-word-main">
-                        <div class="vocab-word-ko">${escapeHtml(w.korean)}${edited ? '<span class="vocab-word-edited-dot" title="你已修改此词">●</span>' : ''}</div>
-                        ${w.pronunciation ? `<div class="vocab-word-pron">${escapeHtml(w.pronunciation)}</div>` : ''}
-                        <div class="vocab-word-zh">${escapeHtml(w.chinese || '')}</div>
-                        ${hasExample ? `<div class="vocab-word-ex">${w.exampleKo ? escapeHtml(w.exampleKo) : ''}${w.exampleZh ? ' <span class="vocab-word-ex-zh">' + escapeHtml(w.exampleZh) + '</span>' : ''}</div>` : ''}
-                    </div>
-                    ${isCustom ? `<button class="vocab-word-del" data-vwdel="${w.id}" title="删除此单词">✕</button>` : ''}
-                `;
-                row.querySelector('.vocab-speak').addEventListener('click', () => Audio.speak(w.korean, 0.9, w.id));
-                bindVocabRec(row.querySelector('.vocab-rec'), w.id, w.korean);
-                if (isCustom) {
-                    row.querySelector('.vocab-word-del').addEventListener('click', () => {
-                        if (!confirm('确定删除单词「' + w.korean + '」吗？\n（这是你导入的词，会同时从学习进度里移除）')) return;
-                        Custom.removeWord(w.id);
-                        // 同时清掉 DB.words（km_words）里的副本，否则下次 DB.load() 会把它们复活
-                        DB.words = DB.words.filter(x => x.id !== w.id);
-                        DB.save();
-                        renderVocabSidebar();
-                        renderVocabAll();
-                        toast('已删除单词', 'success');
-                    });
-                }
-                rows.appendChild(row);
-            });
-            section.appendChild(rows);
-            volBody.appendChild(section);
+                return `<div class="vocab-word-row${edited ? ' is-edited' : ''}" data-wid="${w.id}">` +
+                    `<button class="vocab-speak" title="朗读">🔊</button>` +
+                    `<button class="vocab-rec${hasRec ? ' has-rec' : ''}" data-vrec="${w.id}" title="${hasRec ? '播放录音（再次点击重录）' : '点击录音'}">🎤</button>` +
+                    `<button class="vocab-word-edit" data-vwedit="${w.id}" title="修改单词 / 释义">✎</button>` +
+                    `<div class="vocab-word-main">` +
+                        `<div class="vocab-word-ko">${escapeHtml(w.korean)}${edited ? '<span class="vocab-word-edited-dot" title="你已修改此词">●</span>' : ''}</div>` +
+                        (w.pronunciation ? `<div class="vocab-word-pron">${escapeHtml(w.pronunciation)}</div>` : '') +
+                        `<div class="vocab-word-zh">${escapeHtml(w.chinese || '')}</div>` +
+                        (hasExample ? `<div class="vocab-word-ex">${w.exampleKo ? escapeHtml(w.exampleKo) : ''}${w.exampleZh ? ' <span class="vocab-word-ex-zh">' + escapeHtml(w.exampleZh) + '</span>' : ''}</div>` : '') +
+                    `</div>` +
+                    (isCustom ? `<button class="vocab-word-del" data-vwdel="${w.id}" title="删除此单词">✕</button>` : '') +
+                `</div>`;
+            }).join('');
+            volInner += `<div class="vocab-lesson-section" id="vocab-lesson-${l.id}">` +
+                `<div class="vocab-lesson-section-head collapsible" data-lesson-toggle="${l.id}"><span class="vcaret">▾</span><span class="vls-title">${escapeHtml(l.title)}</span><span class="vls-count">${words.length} 词</span></div>` +
+                `<div class="vocab-lesson-rows">${rows}</div>` +
+            `</div>`;
         });
-        volBlock.appendChild(volBody);
-        frag.appendChild(volBlock);
+        html += `<div class="vocab-volume-block">` +
+            `<div class="vocab-volume-head" data-vol-toggle="${g.key}"><span class="vcaret">▾</span><span class="vvt-label">${escapeHtml(g.label)}</span><span class="vvol-count">${g.lessons.length} 课</span></div>` +
+            `<div class="vocab-volume-body">${volInner}</div>` +
+        `</div>`;
     });
 
-    // 册 / 课 折叠
-    frag.querySelectorAll('[data-vol-toggle]').forEach(el => { el.addEventListener('click', () => {
-        const body = el.parentElement.querySelector('.vocab-volume-body');
-        const caret = el.querySelector('.vcaret');
-        if (body) { const h = body.classList.toggle('collapsed'); if (caret) caret.textContent = h ? '▸' : '▾'; }
-    }); });
-    frag.querySelectorAll('[data-lesson-toggle]').forEach(el => { el.addEventListener('click', () => {
-        const rows = el.parentElement.querySelector ? el.parentElement.querySelector('.vocab-lesson-rows') : null;
-        const caret = el.querySelector('.vcaret');
-        if (rows) { const h = rows.classList.toggle('collapsed'); if (caret) caret.textContent = h ? '▸' : '▾'; }
-    }); });
-
-    listEl.innerHTML = '';
-    if (totalShown === 0) {
-        listEl.innerHTML = `<div class="vocab-empty">没有匹配的单词</div>`;
-    } else {
-        listEl.appendChild(frag);
-    }
-
+    listEl.innerHTML = totalShown === 0 ? `<div class="vocab-empty">没有匹配的单词</div>` : html;
     const totalAll = DB.words.length;
-    header.innerHTML = `<div class="vmh-title">全部单词</div><div class="vmh-count">${f ? '匹配 ' + totalShown + ' / ' + totalAll : '共 ' + totalAll + ' 个单词'}</div>`;
+    header.innerHTML = `<div class="vmh-title">全部单词</div><div class="vmh-count">共 ${totalAll} 个单词</div>`;
+}
+
+// ===== 词库列表点击：事件委托（1 个监听器覆盖全部行 + 折叠）=====
+let vocabListDelegated = false;
+function onVocabListClick(e) {
+    // 册折叠
+    const vh = e.target.closest('.vocab-volume-head[data-vol-toggle]');
+    if (vh) {
+        const body = vh.parentElement.querySelector('.vocab-volume-body');
+        const caret = vh.querySelector('.vcaret');
+        if (body) { const h = body.classList.toggle('collapsed'); if (caret) caret.textContent = h ? '▸' : '▾'; }
+        return;
+    }
+    // 课折叠
+    const lh = e.target.closest('.vocab-lesson-section-head[data-lesson-toggle]');
+    if (lh) {
+        const rows = lh.parentElement.querySelector('.vocab-lesson-rows');
+        const caret = lh.querySelector('.vcaret');
+        if (rows) { const h = rows.classList.toggle('collapsed'); if (caret) caret.textContent = h ? '▸' : '▾'; }
+        return;
+    }
+    // 朗读
+    const speak = e.target.closest('.vocab-speak');
+    if (speak) {
+        const row = speak.closest('.vocab-word-row');
+        const id = row && row.dataset.wid;
+        const w = id && DB.words.find(x => x.id === id);
+        if (w) Audio.speak(w.korean, 0.9, w.id);
+        return;
+    }
+    // 录音
+    const rec = e.target.closest('.vocab-rec');
+    if (rec) { toggleVocabRec(rec, rec.dataset.vrec); return; }
+    // 编辑
+    const edit = e.target.closest('.vocab-word-edit');
+    if (edit) { openWordEdit(edit.dataset.vwedit); return; }
+    // 删除（仅自定义词）
+    const del = e.target.closest('.vocab-word-del');
+    if (del) {
+        const id = del.dataset.vwdel;
+        const w = DB.words.find(x => x.id === id);
+        const ko = w ? w.korean : '';
+        if (!confirm('确定删除单词「' + ko + '」吗？\n（这是你导入的词，会同时从学习进度里移除）')) return;
+        Custom.removeWord(id);
+        // 同时清掉 DB.words（km_words）里的副本，否则下次 DB.load() 会把它们复活
+        DB.words = DB.words.filter(x => x.id !== id);
+        DB.save();
+        renderVocabSidebar();
+        rebuildVocabAll();
+        toast('已删除单词', 'success');
+        return;
+    }
 }
 
 // ===== 单词编辑（按用户隔离覆盖层）=====
@@ -2081,7 +2150,7 @@ function saveWordEdit() {
     const idx = DB.words.findIndex(x => x.id === editingWordId);
     if (idx >= 0) Object.assign(DB.words[idx], fields, { _edited: true });
     hideModal('word-edit-modal');
-    renderVocabAll();
+    rebuildVocabAll();
     refreshLearnCardIfVisible();
     toast('已保存修改', 'success');
 }
@@ -2101,7 +2170,7 @@ function revertWordEdit() {
         }
     }
     hideModal('word-edit-modal');
-    renderVocabAll();
+    rebuildVocabAll();
     refreshLearnCardIfVisible();
     toast('已恢复原始内容', 'success');
 }
@@ -2115,7 +2184,43 @@ function refreshLearnCardIfVisible() {
 function vocabSearch() {
     const si = document.getElementById('vocab-search-input');
     vocabFilter = si ? si.value : '';
+    if (!vocabBuilt) { renderVocabAll(); vocabBuilt = true; vocabDirty = false; }
+    // 仅显隐已有节点，不再全量重建（大词库下输入即时响应）
+    applyVocabFilter();
+}
+
+// 全量重建并保留当前过滤态
+function rebuildVocabAll() {
     renderVocabAll();
+    vocabBuilt = true;
+    vocabDirty = false;
+    applyVocabFilter();
+}
+
+// 在已构建的 DOM 上做关键词显隐（毫秒级，避免 3148 词重排）
+function applyVocabFilter() {
+    const listEl = document.getElementById('vocab-word-list');
+    if (!listEl) return;
+    const f = vocabFilter.trim().toLowerCase();
+    let shown = 0;
+    listEl.querySelectorAll('.vocab-lesson-section').forEach(sec => {
+        let secShown = 0;
+        sec.querySelectorAll('.vocab-word-row').forEach(row => {
+            const match = !f || row.textContent.toLowerCase().includes(f);
+            row.style.display = match ? '' : 'none';
+            if (match) { secShown++; shown++; }
+        });
+        sec.style.display = secShown ? '' : 'none';
+    });
+    listEl.querySelectorAll('.vocab-volume-block').forEach(vb => {
+        const anyVisible = vb.querySelector('.vocab-lesson-section:not([style*="display: none"])');
+        vb.style.display = anyVisible ? '' : 'none';
+    });
+    const header = document.getElementById('vocab-main-header');
+    if (header) {
+        const totalAll = DB.words.length;
+        header.innerHTML = `<div class="vmh-title">全部单词</div><div class="vmh-count">${f ? '匹配 ' + shown + ' / ' + totalAll : '共 ' + totalAll + ' 个单词'}</div>`;
+    }
 }
 
 function escapeHtml(s) {
@@ -2155,7 +2260,7 @@ function updateProfileChip() {
     if (!p) return;
     const a = document.getElementById('pc-avatar');
     const n = document.getElementById('pc-name');
-    setAvatarEl(a, p.avatar);  // p.avatar 实际是当前用户的 avatar 字段
+    if (a) setAvatarEl(a, p.avatar);  // p.avatar 实际是当前用户的 avatar 字段
     if (n) n.textContent = p.name;
 }
 
@@ -2218,6 +2323,7 @@ function switchProfile(id) {
     }
     Profiles.switchTo(id);
     reloadAfterProfileChange();
+    markVocabDirty();   // 切换用户后词库进度/录音状态变化，下次进入重建
     updateProfileChip();
     renderProfileGrid('profile-grid');
     renderProfileGrid('profile-grid-modal');
@@ -2407,7 +2513,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v43';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v47';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2652,6 +2758,7 @@ function importProgressFile(file) {
             DB.save();
             if (d.plan) { DB.plan = d.plan; DB.savePlan(); }
             reloadAfterProfileChange();
+            markVocabDirty();   // 进度导入改变单词状态，下次进入词库重建
             toast('进度导入成功', 'success');
         } catch (e) {
             toast('导入失败：' + e.message, 'error');
@@ -2675,48 +2782,47 @@ function safeRun(label, fn) {
 let recActiveWordId = null;   // 当前正在录音的 wordId
 let recActiveBtn = null;      // 当前录音按钮元素
 
-function bindVocabRec(btn, wordId) {
+// 直接触发某词录音按钮的动作（供事件委托复用，不再每按钮挂监听）
+async function toggleVocabRec(btn, wordId) {
     if (!btn || !window.Recordings) return;
-    btn.addEventListener('click', async () => {
-        // 正在录音 → 停止并保存
-        if (Recordings.isRecording()) {
-            const ok = await Recordings.stopAndSave(recActiveWordId);
-            if (recActiveBtn) {
-                recActiveBtn.classList.remove('recording');
-                recActiveBtn.textContent = '🎤';
-                if (ok) recActiveBtn.classList.add('has-rec');
-            }
-            recActiveWordId = null;
-            recActiveBtn = null;
-            if (ok) { toast('录音已保存 ✓', 'success'); refreshRecordings(); }
-            else toast('录音失败，请检查麦克风权限', 'error');
-            return;
+    // 正在录音 → 停止并保存
+    if (Recordings.isRecording()) {
+        const ok = await Recordings.stopAndSave(recActiveWordId);
+        if (recActiveBtn) {
+            recActiveBtn.classList.remove('recording');
+            recActiveBtn.textContent = '🎤';
+            if (ok) recActiveBtn.classList.add('has-rec');
         }
-        // 有录音 → 播放
-        if (Recordings.hasCached(wordId)) {
-            const ok = await Recordings.play(wordId);
-            if (!ok) toast('录音播放失败', 'error');
-            return;
-        }
-        // 无录音 → 开始录音
-        if (!Recordings.isSupported()) { toast('此浏览器不支持录音（需要麦克风 + MediaRecorder）', 'error'); return; }
-        const started = await Recordings.start();
-        if (!started || !started.ok) {
-            const why = started && started.why;
-            let msg = '录音启动失败：' + (why || '未知错误');
-            if (why === 'NotAllowedError' || why === 'SecurityError') msg = '麦克风权限被拒绝：请在浏览器地址栏/设置里允许访问麦克风后重试';
-            else if (why === 'NotFoundError' || why === 'DevicesNotFoundError') msg = '未检测到麦克风设备，请检查平板麦克风';
-            else if (why === 'NotReadableError' || why === 'TrackStartError') msg = '麦克风被其他应用占用，请关闭其他录音软件';
-            else if (why === 'unsupported') msg = '此浏览器不支持录音（需要麦克风 + MediaRecorder）';
-            toast(msg, 'error');
-            return;
-        }
-        recActiveWordId = wordId;
-        recActiveBtn = btn;
-        btn.classList.add('recording');
-        btn.textContent = '⏹';
-        toast('🎤 录音中…再次点击停止', 'info');
-    });
+        recActiveWordId = null;
+        recActiveBtn = null;
+        if (ok) { toast('录音已保存 ✓', 'success'); refreshRecordings(); }
+        else toast('录音失败，请检查麦克风权限', 'error');
+        return;
+    }
+    // 有录音 → 播放
+    if (Recordings.hasCached(wordId)) {
+        const ok = await Recordings.play(wordId);
+        if (!ok) toast('录音播放失败', 'error');
+        return;
+    }
+    // 无录音 → 开始录音
+    if (!Recordings.isSupported()) { toast('此浏览器不支持录音（需要麦克风 + MediaRecorder）', 'error'); return; }
+    const started = await Recordings.start();
+    if (!started || !started.ok) {
+        const why = started && started.why;
+        let msg = '录音启动失败：' + (why || '未知错误');
+        if (why === 'NotAllowedError' || why === 'SecurityError') msg = '麦克风权限被拒绝：请在浏览器地址栏/设置里允许访问麦克风后重试';
+        else if (why === 'NotFoundError' || why === 'DevicesNotFoundError') msg = '未检测到麦克风设备，请检查平板麦克风';
+        else if (why === 'NotReadableError' || why === 'TrackStartError') msg = '麦克风被其他应用占用，请关闭其他录音软件';
+        else if (why === 'unsupported') msg = '此浏览器不支持录音（需要麦克风 + MediaRecorder）';
+        toast(msg, 'error');
+        return;
+    }
+    recActiveWordId = wordId;
+    recActiveBtn = btn;
+    btn.classList.add('recording');
+    btn.textContent = '⏹';
+    toast('🎤 录音中…再次点击停止', 'info');
 }
 
 function updateRecCount() {
