@@ -2381,6 +2381,43 @@ body {
     padding-right: 6px;
 }
 
+/* 移动端：左侧课程选择收成「顶部横向滚动条」，单词区占满整行，
+   解决手机上 270px 侧栏挤掉单词的问题。 */
+@media (max-width: 768px) {
+    .vocab-layout {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .vocab-sidebar {
+        width: 100%;
+        max-height: 38vh;          /* 顶部课选择器，内部可滚动，不抢单词空间 */
+        padding: 8px 10px;
+    }
+    .vocab-volume-title {
+        padding: 8px 6px 4px;
+        font-size: 13px;
+    }
+    .vocab-lesson-list {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 6px;
+        padding: 2px 2px 8px;
+    }
+    .vocab-lesson-item {
+        white-space: nowrap;
+        flex-shrink: 0;
+        padding: 8px 14px;
+    }
+    .vocab-main {
+        width: 100%;
+        min-width: 0;
+    }
+    .vocab-word-list {
+        max-height: none;          /* 由外层 .main-content 统一滚动，单词全部可见 */
+    }
+}
+
 .vocab-word-row {
     display: flex;
     gap: 14px;
