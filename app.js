@@ -504,9 +504,6 @@ function renderLessonProgress() {
     lessons.forEach(lesson => {
         const ws = lesson.wordStats;
         const wordPercent = ws.total > 0 ? (ws.learned / ws.total * 100) : 0;
-        const textPercent = lesson.text
-            ? (lesson.text.status === 'mastered' ? 100 : lesson.text.status === 'new' ? 0 : 50)
-            : 0;
 
         const item = document.createElement('div');
         item.className = 'lesson-progress-item';
@@ -517,13 +514,9 @@ function renderLessonProgress() {
                     <span class="lp-label">词</span>
                     <div class="lp-bar"><div class="lp-bar-fill word-fill" style="width:${wordPercent}%"></div></div>
                 </div>
-                <div class="lp-dual-row">
-                    <span class="lp-label">文</span>
-                    <div class="lp-bar"><div class="lp-bar-fill text-fill" style="width:${textPercent}%"></div></div>
-                </div>
             </div>
             <div class="lp-stats">
-                词 ${ws.learned}/${ws.total} · ${lesson.textLabel}
+                词 ${ws.learned}/${ws.total}
             </div>
         `;
         listEl.appendChild(item);
@@ -2802,7 +2795,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v41';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v42';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
