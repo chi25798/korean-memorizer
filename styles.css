@@ -50,7 +50,8 @@ body {
     background: var(--bg);
     color: var(--text-main);
     height: 100vh;          /* 兜底（旧浏览器） */
-    height: 100dvh;         /* 动态视口高度：自动排除手机/平板浏览器底栏，避免底部留白被遮 */
+    height: 100dvh;         /* 动态视口高度：自动排除手机/平板浏览器底栏 */
+    height: var(--app-h, 100dvh);  /* JS 实时写入的真实可视高度（夸克等不支持 dvh 的浏览器兜底） */
     overflow: hidden;
 }
 
@@ -59,6 +60,7 @@ body {
     flex-direction: column;
     height: 100vh;          /* 兜底 */
     height: 100dvh;         /* 同 body：排除浏览器底栏 */
+    height: var(--app-h, 100dvh);  /* JS 实时写入的真实可视高度，彻底解决夸克等浏览器底栏遮挡 */
 }
 
 /* ===== 侧边栏 ===== */

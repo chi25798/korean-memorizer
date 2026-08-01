@@ -2513,7 +2513,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v56';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v57';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2816,6 +2816,24 @@ function safeRun(label, fn) {
     }
 }
 
+// 把真实可视高度写入 --app-h，供 body/#app 的 height 使用。
+// 解决夸克等不支持 100dvh / 底部工具栏叠加遮挡的浏览器：
+// window.innerHeight 在 Chrome 系会随地址栏显隐实时变化，resize 即触发更新。
+function setAppH() {
+    try {
+        const h = window.innerHeight;
+        if (h && h > 0) {
+            document.documentElement.style.setProperty('--app-h', h + 'px');
+        }
+    } catch (e) { /* 忽略 */ }
+}
+window.addEventListener('resize', setAppH);
+if (window.visualViewport && window.visualViewport.addEventListener) {
+    window.visualViewport.addEventListener('resize', setAppH);
+}
+// 脚本一加载就先设一次，避免首帧用错高度
+setAppH();
+
 // ===== 词库录音管理 =====
 let recActiveWordId = null;   // 当前正在录音的 wordId
 let recActiveBtn = null;      // 当前录音按钮元素
@@ -2902,6 +2920,8 @@ function refreshRecordings() {
 }
 
 function init() {
+    // 最先设置可视高度，避免底部工具栏遮挡（夸克等浏览器）
+    safeRun('setAppH', setAppH);
     // 必须最先执行：在读取任何进度前，把本地旧 word id 迁移到规范 id
     safeRun('migrateWordIds', migrateLegacyWordIds);
     Profiles.init();
