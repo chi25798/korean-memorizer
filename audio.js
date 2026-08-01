@@ -172,8 +172,10 @@ const Audio = (() => {
                 if (ok) return true;
             } catch (e) { /* 忽略，回退 TTS */ }
         }
-        // 优先用本地发音包（离线可靠）
-        if (wordId) {
+        // 优先用本地发音包（离线可靠）；仅内置词 id 形如 w-... 才有本地文件，
+        // 导入词（ul-...）无本地文件，跳过 3.5s 等待直接走在线 TTS（由 SW 缓存离线可用）
+        const maybeLocal = wordId && /^w-\d/.test(wordId);
+        if (maybeLocal) {
             try {
                 const ok = await playLocalAudio(wordId, rate);
                 if (ok) return true;
