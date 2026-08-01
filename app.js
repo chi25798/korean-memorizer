@@ -2551,7 +2551,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v60';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v61';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2855,11 +2855,15 @@ function safeRun(label, fn) {
 }
 
 // 把真实可视高度写入 --app-h，供 body/#app 的 height 使用。
-// 解决夸克等不支持 100dvh / 底部工具栏叠加遮挡的浏览器：
-// window.innerHeight 在 Chrome 系会随地址栏显隐实时变化，resize 即触发更新。
+// 解决夸克等不支持 100dvh / 底部工具栏叠加遮挡的浏览器。
+// 关键：必须用 visualViewport.height（真实可见区域，已排除浏览器底栏/工具栏），
+// 而不是 window.innerHeight（含工具栏的「布局视口」高度）。否则 #app 会比
+// 可见区域高，平板横屏等场景底部内容被工具栏盖住、无留白。
+// visualViewport 会随工具栏显隐实时变化，resize 即触发更新。
 function setAppH() {
     try {
-        const h = window.innerHeight;
+        const vv = window.visualViewport;
+        const h = (vv && vv.height) ? vv.height : window.innerHeight;
         if (h && h > 0) {
             document.documentElement.style.setProperty('--app-h', h + 'px');
         }
@@ -2868,6 +2872,8 @@ function setAppH() {
 window.addEventListener('resize', setAppH);
 if (window.visualViewport && window.visualViewport.addEventListener) {
     window.visualViewport.addEventListener('resize', setAppH);
+    // 工具栏随滚动显隐时也会改变可见高度，滚动时也刷新一次更稳
+    window.visualViewport.addEventListener('scroll', setAppH);
 }
 // 脚本一加载就先设一次，避免首帧用错高度
 setAppH();

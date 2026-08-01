@@ -193,7 +193,7 @@ body {
     /* 顶部/左右保持原样；底部留较大余白，避免最后一课（如第四册第35课）
        在移动端被浏览器底栏遮挡、贴边不好看。影响所有页面。
        含 env(safe-area-inset-bottom) 以兼容刘海/Home 指示条设备。 */
-    padding: 24px 36px calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: 24px 36px calc(72px + env(safe-area-inset-bottom, 0px));
 }
 
 .page {
