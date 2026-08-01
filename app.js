@@ -680,10 +680,6 @@ function renderPlanDetail() {
     lessons.forEach(lesson => {
         const ws = lesson.wordStats;
         const wordPct = ws.total > 0 ? (ws.learned / ws.total * 100) : 0;
-        const textStatus = lesson.text ? SRS.getNextReviewLabel(lesson.text) : '无课文';
-        const textPct = lesson.text
-            ? (lesson.text.status === 'mastered' ? 100 : lesson.text.status === 'new' ? 0 : 50)
-            : 0;
 
         const row = document.createElement('div');
         row.className = 'pdr-item';
@@ -694,11 +690,6 @@ function renderPlanDetail() {
                     <span class="pdr-bar-label">词</span>
                     <div class="pdr-bar"><div class="pdr-bar-fill word-fill" style="width:${wordPct}%"></div></div>
                     <span class="pdr-bar-num">${ws.learned}/${ws.total}</span>
-                </div>
-                <div class="pdr-bar-row">
-                    <span class="pdr-bar-label">📝</span>
-                    <div class="pdr-bar"><div class="pdr-bar-fill text-fill" style="width:${textPct}%"></div></div>
-                    <span class="pdr-bar-num">${textStatus}</span>
                 </div>
             </div>
         `;
@@ -2811,7 +2802,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v40';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v41';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
