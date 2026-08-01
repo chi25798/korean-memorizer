@@ -69,27 +69,38 @@ const Custom = {
         return lesson;
     },
 
-    /** 追加单词到已有的自定义课程 */
+    /** 追加单词到已有的自定义课程（自动跳过课内已存在的同词，避免重复补充） */
     appendToLesson(lessonId, items) {
         const lesson = this.lessons.find(l => l.id === lessonId);
         if (!lesson) return 0;
+        // 收集该课已有的 (韩语|中文)，用于去重
+        const existing = new Set((lesson.wordIds || [])
+            .map(wid => this.words.find(w => w.id === wid))
+            .filter(Boolean)
+            .map(w => ((w.korean || '').trim()) + '|' + ((w.chinese || '').trim())));
         let n = 0;
         items.forEach((it) => {
-            const wid = lessonId + '-w' + Date.now().toString(36) + '-' + n;
+            const ko = (it.korean || '').trim();
+            const zh = (it.chinese || '').trim();
+            if (!ko || !zh) return;
+            const key = ko + '|' + zh;
+            if (existing.has(key)) return;   // 这一课已经收录过，跳过
+            const wid = lessonId + '-w' + Date.now().toString(36) + '-' + (this._seq = (this._seq || 0) + 1) + '-' + Math.random().toString(36).slice(2, 6);
             lesson.wordIds.push(wid);
             this.words.push({
                 id: wid,
-                korean: (it.korean || '').trim(),
-                chinese: (it.chinese || '').trim(),
+                korean: ko,
+                chinese: zh,
                 pronunciation: (it.pronunciation || '').trim(),
                 part: '',
                 exampleKo: (it.exampleKo || '').trim(),
                 exampleZh: (it.exampleZh || '').trim(),
                 lessonId: lessonId
             });
+            existing.add(key);
             n++;
         });
-        this.save();
+        if (n > 0) this.save();
         return n;
     },
 

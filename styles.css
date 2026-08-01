@@ -3563,6 +3563,17 @@ body {
 }
 .clr-del:hover { background: var(--pink-light); }
 
+.clr-sup {
+    padding: 4px 12px;
+    border: 1.5px solid #BDEDE7;
+    border-radius: 9px;
+    background: #fff;
+    color: #1F9C8E;
+    font-size: 12px;
+    cursor: pointer;
+}
+.clr-sup:hover { background: #E6F7F4; }
+
 /* 已导入：课可展开，下面是该课的单词（可单独删除） */
 .custom-lesson-block { border-bottom: 1px solid #F0F3F8; }
 .custom-lesson-block:last-child { border-bottom: none; }

@@ -569,6 +569,8 @@ function confirmImport() {
         book = bookSel.replace('__book__', '');
     }
     const appendSel = document.getElementById('import-append-target').value;
+    let isAppend = false;
+    let targetTitle = '';
     if (appendSel === '__newlesson__') {
         const title = (document.getElementById('import-title').value || '').trim();
         if (!title) {
@@ -576,9 +578,21 @@ function confirmImport() {
             return;
         }
         Custom.addLesson(title, book, picked);
+        targetTitle = title;
     } else {
         // 追加到这本书已有的某一课
+        const before = Custom.words.length;
         Custom.appendToLesson(appendSel, picked);
+        isAppend = true;
+        targetTitle = (Custom.lessons.find(l => l.id === appendSel) || {}).title || '';
+        const added = Custom.words.length - before;
+        if (added < picked.length) {
+            // 部分词已在课内（去重跳过），单独给提示后走通用收尾
+            importSetStatus('《' + book + ' · ' + targetTitle + '》已补充 ' + added + ' 个新单词（' + (picked.length - added) + ' 个已存在，自动跳过）；去「背单词」就能看到', 'success');
+            toast('已补充 ' + added + ' 个单词', 'success');
+            finishImportCommon(picked.map(w => w.korean));
+            return;
+        }
     }
 
     // 重新加载词库，新词立刻进入学习体系
@@ -599,8 +613,67 @@ function confirmImport() {
             Audio.precacheImport(picked.map(w => w.korean));
         }
     } catch (e) { /* 忽略 */ }
-    importSetStatus('导入成功，新增 ' + picked.length + ' 个单词！去「背单词」就能看到了', 'success');
-    toast('已导入 ' + picked.length + ' 个单词', 'success');
+    if (isAppend) {
+        importSetStatus('已为《' + book + ' · ' + targetTitle + '》补充 ' + picked.length + ' 个单词！去「背单词」就能看到了', 'success');
+        toast('已补充 ' + picked.length + ' 个单词', 'success');
+    } else {
+        importSetStatus('导入成功，新增 ' + picked.length + ' 个单词！去「背单词」就能看到了', 'success');
+        toast('已导入 ' + picked.length + ' 个单词', 'success');
+    }
+}
+
+/** 导入/补充完成后的通用收尾（清空输入框、刷新列表、预下载音频） */
+function finishImportCommon(koreans) {
+    DB.load();
+    importCandidates = [];
+    const ta = document.getElementById('import-textarea'); if (ta) ta.value = '';
+    const fi = document.getElementById('import-file'); if (fi) fi.value = '';
+    const ti = document.getElementById('import-title'); if (ti) ti.value = '';
+    const bk = document.getElementById('import-book'); if (bk) bk.value = '';
+    renderImportPreview();
+    renderBookSelect();
+    renderBookDropdown();
+    renderCustomLessonList();
+    try {
+        if (typeof Audio !== 'undefined' && Audio.precacheImport) {
+            Audio.precacheImport(koreans && koreans.length ? koreans : importCandidates.map(w => w.korean));
+        }
+    } catch (e) { /* 忽略 */ }
+}
+
+/**
+ * 从「已导入的内容」里点「➕ 补充」触发：
+ * 跳到导入页，并把书名 / 课预选好，用户只需粘贴新词 → 识别 → 确认即可追加到这一课。
+ */
+function startSupplement(lessonId) {
+    const l = Custom.lessons.find(x => x.id === lessonId);
+    if (!l) {
+        importSetStatus('找不到这门课，请改用下方下拉框选择', 'error');
+        return;
+    }
+    // 先切到导入页（navigateTo('import') 会 re-init 重置下拉框），再回填预选
+    if (typeof navigateTo === 'function') navigateTo('import');
+    importCandidates = [];
+
+    const bkLabel = customBookLabel(l);
+    const v = '__book__' + escapeHtml(bkLabel);
+    const sel = document.getElementById('import-book-select');
+    if (sel) {
+        const exists = Array.from(sel.options).some(o => o.value === v);
+        if (!exists) renderBookDropdown();
+        sel.value = v;
+    }
+    onBookSelectChange();                 // 触发第二个下拉框列出本书已有课
+    const asel = document.getElementById('import-append-target');
+    if (asel) asel.value = lessonId;      // 直接预选到这一课
+    onAppendTargetChange();
+
+    const ta = document.getElementById('import-textarea');
+    if (ta) { ta.value = ''; ta.focus(); }
+    renderImportPreview();
+    importSetStatus('正在为《' + bkLabel + ' · ' + l.title + '》补充单词：粘贴新词后点「🔍 识别单词」，再点「✅ 确认导入」', 'success');
+    const wrap = document.querySelector('#page-import .import-wrap');
+    if (wrap) wrap.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderCustomLessonList() {
@@ -635,11 +708,13 @@ function renderCustomLessonList() {
     keys.forEach(k => {
         html += '<div class="clr-group"><div class="clr-group-title">' + escapeHtml(k) + '</div>';
         groups[k].forEach(l => {
+            const showSup = !l._orphan;   // 历史遗留课没有稳定归属，不提供「补充」
             html += '<div class="custom-lesson-block">' +
                 '<div class="custom-lesson-row" data-cl-toggle="' + l.id + '">' +
                     '<span class="clr-caret">▸</span>' +
                     '<span class="clr-title">' + escapeHtml(l.title) + '</span>' +
                     '<span class="clr-count">' + l.wordIds.length + ' 词</span>' +
+                    (showSup ? '<button class="clr-sup" data-cl-sup="' + l.id + '" title="往这一课补充单词">➕ 补充</button>' : '') +
                     '<button class="clr-del" data-cl-del="' + l.id + '">删除整课</button>' +
                 '</div>' +
                 '<div class="clr-words hidden" data-cl-words="' + l.id + '">';
@@ -661,7 +736,7 @@ function renderCustomLessonList() {
     // 展开/收起某课下的单词
     box.querySelectorAll('[data-cl-toggle]').forEach(el => {
         el.addEventListener('click', (e) => {
-            if (e.target.closest('.clr-del')) return; // 点删除不触发展开
+            if (e.target.closest('.clr-del') || e.target.closest('.clr-sup')) return; // 点按钮不触发展开
             const id = el.dataset.clToggle;
             const words = box.querySelector('[data-cl-words="' + id + '"]');
             const caret = el.querySelector('.clr-caret');
@@ -669,6 +744,13 @@ function renderCustomLessonList() {
                 const hidden = words.classList.toggle('hidden');
                 if (caret) caret.textContent = hidden ? '▸' : '▾';
             }
+        });
+    });
+    // 往某一课补充单词：直接进入导入页并预选好书+课
+    box.querySelectorAll('[data-cl-sup]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startSupplement(el.dataset.clSup);
         });
     });
     // 删除整课
