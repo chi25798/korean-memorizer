@@ -219,6 +219,18 @@ body {
     background-clip: text;
 }
 
+/* 导入页 / 我的页：整体放大一点，并居中、四周留余量。
+   width 用 calc(100%/zoom) 抵消 zoom 引起的横向溢出，max-width+margin:auto 实现居中留白。 */
+#page-import,
+#page-me {
+    max-width: 1000px;
+    margin: 0 auto;
+    width: calc(100% / 1.06);
+    zoom: 1.06;
+    box-sizing: border-box;
+    padding: 10px 20px 28px;
+}
+
 /* ===== 首页 ===== */
 .home-hero {
     background: var(--gradient-main);

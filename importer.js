@@ -56,17 +56,34 @@ function isNoiseLine(line) {
 
 /**
  * 从一行里提取词条。支持这些常见排版：
+ *   中文（韩语）并列多词：叠被子（이불을 정리하다）、刷牙（이를 닦다）、洗脸（세수하다）
  *   한국어    中文
  *   한국어 | 中文
  *   한국어,中文
  *   한국어[名]中文
  *   한국어（你好）        ← 韩语在前，中文用全角/半角括号括起来
+ *   안녕하세요（你好）    ← 同上（韩语在外）
  *   你好（안녕하세요）    ← 中文在前，韩语用括号括起来
  *   안녕하세요你好        ← 韩前中后无分隔
  */
 function parseLine(line) {
     let t = line.replace(/\s+/g, ' ').trim();
     if (!t || isNoiseLine(t)) return [];
+    if (!RE_HAS_HANGUL.test(t) || !RE_HAS_CJK.test(t)) return [];
+
+    // 一行内可能用「、；;」并列了多个词条，先拆成单条再逐个解析，
+    // 避免「只认出第一个」的问题。（「，」/「,」/「|」留作单条内部的韩中分隔符，不在此拆。）
+    const clauses = t.split(/[、；;]+/).map(s => s.trim()).filter(Boolean);
+    if (clauses.length > 1) {
+        const res = [];
+        clauses.forEach(c => parseSingle(c).forEach(e => res.push(e)));
+        return res;
+    }
+    return parseSingle(t);
+}
+
+/** 解析单条（已不含并列分隔符） */
+function parseSingle(t) {
     if (!RE_HAS_HANGUL.test(t) || !RE_HAS_CJK.test(t)) return [];
 
     const out = [];
@@ -90,21 +107,37 @@ function parseLine(line) {
     }
 
     // 情形 C：括号包裹的「次要语言」
-    //   안녕하세요（你好） → 韩语在外、中文在（）内
-    //   你好（안녕하세요） → 中文在外、韩语在（）内
+    //   你好（안녕하세요）→ 中文在外、韩语在（）内
+    //   안녕하세요（你好）→ 韩语在外、中文在（）内
+    //   支持一行内并列多个：叠被子（이불을 정리하다）、刷牙（이를 닦다）、洗脸（세수하다）
     const parenRe = /[（(]([^（）()]{1,40})[)）]/g;
     const parenGroups = [];
     let pm;
     while ((pm = parenRe.exec(t)) !== null) parenGroups.push(pm[1]);
     if (parenGroups.length) {
-        const outer = t.replace(/[（(][^（）()]{1,40}[)）]/g, ' ').trim();
         const innerKo = parenGroups.find(g => RE_HAS_HANGUL.test(g));
         const innerZh = parenGroups.find(g => RE_HAS_CJK.test(g) && !RE_HAS_HANGUL.test(g));
-        if (innerKo && RE_HAS_CJK.test(outer) && !RE_HAS_HANGUL.test(outer)) {
-            return [{ korean: cleanKo(innerKo), chinese: cleanZh(outer) }];
+        // 用占位符替换括号，保留「外-内」的相对位置，再按并列分隔符切分外侧语段
+        const SEP = '\u0001';
+        const outer = t.replace(/[（(][^（）()]{1,40}[)）]/g, SEP);
+        const segRe = new RegExp('[\\u0001、，,；;]+');
+        if (innerKo && !innerZh) {
+            // 韩语在括号内（中文在外）：如 你好（안녕하세요）、再见（안녕히）
+            const zhSegs = outer.split(segRe).map(cleanZh)
+                .filter(s => s && RE_HAS_CJK.test(s) && !RE_HAS_HANGUL.test(s));
+            if (zhSegs.length === parenGroups.length) {
+                return parenGroups.map((g, i) => ({ korean: cleanKo(g), chinese: zhSegs[i] }));
+            }
+            if (zhSegs.length) return [{ korean: cleanKo(innerKo), chinese: zhSegs.join('') }];
         }
-        if (innerZh && RE_HAS_HANGUL.test(outer)) {
-            return [{ korean: cleanKo(outer), chinese: cleanZh(innerZh) }];
+        if (innerZh && !innerKo) {
+            // 中文在括号内（韩语在外）：如 안녕하세요（你好）、안녕히（再见）
+            const koSegs = outer.split(segRe).map(cleanKo)
+                .filter(s => s && RE_HAS_HANGUL.test(s) && !RE_HAS_CJK.test(s));
+            if (koSegs.length === parenGroups.length) {
+                return parenGroups.map((g, i) => ({ korean: koSegs[i], chinese: cleanZh(g) }));
+            }
+            if (koSegs.length) return [{ korean: koSegs[0], chinese: cleanZh(innerZh) }];
         }
     }
 
@@ -123,7 +156,7 @@ function cleanKo(s) {
 }
 
 function cleanZh(s) {
-    return s.replace(/^[\s\-—:：,，]+/, '').replace(/[\s;；]+$/, '').trim();
+    return s.replace(/^[\s\-—:：,，、；;]+/, '').replace(/[\s;；,，、]+$/, '').trim();
 }
 
 /** 整篇文本 -> 候选词条数组（已去重） */
