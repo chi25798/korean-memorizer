@@ -593,6 +593,12 @@ function confirmImport() {
     renderBookSelect();
     renderBookDropdown();
     renderCustomLessonList();
+    // 新词后台预下载音频（联网时），导入后即可发音、离线也能播
+    try {
+        if (typeof Audio !== 'undefined' && Audio.precacheImport) {
+            Audio.precacheImport(picked.map(w => w.korean));
+        }
+    } catch (e) { /* 忽略 */ }
     importSetStatus('导入成功，新增 ' + picked.length + ' 个单词！去「背单词」就能看到了', 'success');
     toast('已导入 ' + picked.length + ' 个单词', 'success');
 }

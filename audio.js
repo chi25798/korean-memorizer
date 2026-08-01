@@ -52,6 +52,8 @@ const Audio = (() => {
             // 某些浏览器异步加载语音列表
             synthesis.onvoiceschanged = loadVoices;
         }
+        // 初始化导入词音频缓存（IndexedDB）
+        try { TtsCache.init().catch(() => {}); } catch (e) { /* 忽略 */ }
     }
 
     function loadVoices() {
@@ -191,6 +193,134 @@ const Audio = (() => {
 
     const isBuiltinId = (id) => id && /^w-\d/.test(id);
 
+    // ===== 导入词音频缓存（CORS 代理下载到 IndexedDB，离线可播） =====
+    // 导入的全新词（教材里没有的）本地无 MP3，在线 TTS（百度/有道）无 CORS 头，
+    // 移动端无法稳定播放其 opaque 响应。改用「CORS 代理」拿到真实音频 blob 存 IndexedDB，
+    // 首次联网下载后、离线也能播；代理地址可在「我的」页配置（默认公共代理）。
+    const TTS_PROXY_KEY = 'km_tts_proxy';
+    function getProxy() {
+        let p = '';
+        try { p = localStorage.getItem(TTS_PROXY_KEY) || ''; } catch (e) { /* 忽略 */ }
+        return p || 'https://api.allorigins.win/raw?url=';
+    }
+    function setProxy(url) {
+        try {
+            if (url && url.trim()) localStorage.setItem(TTS_PROXY_KEY, url.trim());
+            else localStorage.removeItem(TTS_PROXY_KEY);
+        } catch (e) { /* 忽略 */ }
+    }
+
+    const TtsCache = (() => {
+        const DB_NAME = 'korean-memorizer-ttscache';
+        const STORE = 'tts';
+        const DB_VERSION = 1;
+        let db = null;
+        const cache = new Map();   // text(原始) -> blobURL
+        function init() {
+            return new Promise((resolve) => {
+                if (!('indexedDB' in window)) { resolve(false); return; }
+                try {
+                    const req = indexedDB.open(DB_NAME, DB_VERSION);
+                    req.onupgradeneeded = (e) => {
+                        const d = e.target.result;
+                        if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE);
+                    };
+                    req.onsuccess = (e) => {
+                        db = e.target.result;
+                        try {
+                            const st = db.transaction(STORE, 'readonly').objectStore(STORE);
+                            const blobs = st.getAll();
+                            const keys = st.getAllKeys();
+                            blobs.onsuccess = () => {
+                                const arr = blobs.result || [];
+                                keys.onsuccess = () => {
+                                    const ks = keys.result || [];
+                                    ks.forEach((k, i) => { if (arr[i]) cache.set(k, URL.createObjectURL(arr[i])); });
+                                    resolve(true);
+                                };
+                                keys.onerror = () => resolve(true);
+                            };
+                            blobs.onerror = () => resolve(true);
+                        } catch (err) { resolve(true); }
+                    };
+                    req.onerror = () => resolve(false);
+                } catch (e) { resolve(false); }
+            });
+        }
+        function save(text, blob) {
+            return new Promise((resolve) => {
+                if (!db) { resolve(false); return; }
+                try {
+                    const r = db.transaction(STORE, 'readwrite').objectStore(STORE).put(blob, text);
+                    r.onsuccess = () => { cache.set(text, URL.createObjectURL(blob)); resolve(true); };
+                    r.onerror = () => resolve(false);
+                } catch (e) { resolve(false); }
+            });
+        }
+        function getURL(text) { return cache.get(text) || null; }
+        function has(text) { return cache.has(text); }
+        function clearAll() {
+            return new Promise((resolve) => {
+                cache.forEach((u) => { try { URL.revokeObjectURL(u); } catch (e) { /* 忽略 */ } });
+                cache.clear();
+                if (!db) { resolve(false); return; }
+                try {
+                    const r = db.transaction(STORE, 'readwrite').objectStore(STORE).clear();
+                    r.onsuccess = () => resolve(true);
+                    r.onerror = () => resolve(false);
+                } catch (e) { resolve(false); }
+            });
+        }
+        return { init, save, getURL, has, clearAll };
+    })();
+
+    /** 通过 CORS 代理下载韩语 TTS 音频（真实 blob），存入 IndexedDB，返回 blobURL */
+    async function fetchTTSViaProxy(text) {
+        const cleaned = cleanTextForTTS(text);
+        if (!cleaned) return null;
+        const baidu = ONLINE_TTS[0].build(cleaned);
+        const proxy = getProxy();
+        const url = proxy + encodeURIComponent(baidu);
+        try {
+            const r = await fetch(url);
+            if (!r || !r.ok) return null;
+            const blob = await r.blob();
+            if (!blob || blob.size < 800) return null;   // 太小多半是错误页/HTML
+            await TtsCache.save(text, blob);
+            return TtsCache.getURL(text);
+        } catch (e) { return null; }
+    }
+
+    /** 用常驻 video 元素播放 blobURL */
+    function playBlobURL(url, rate) {
+        return new Promise((resolve) => {
+            const a = ensureAudioEl();
+            if (!a) { resolve(false); return; }
+            let settled = false;
+            const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+            a.onplaying = () => finish(true);
+            a.onerror = () => finish(false);
+            a.volume = 1; a.muted = false;
+            try { a.playbackRate = rate || 1; } catch (e) { /* 忽略 */ }
+            a.src = url; a.load();
+            const p = a.play();
+            if (p && p.then) p.then(() => setTimeout(() => { if (!settled) finish(true); }, 300)).catch(() => finish(false));
+            setTimeout(() => finish(false), 4000);
+        });
+    }
+
+    /** 导入成功后：后台为新词预下载音频（不阻塞 UI，失败静默） */
+    function precacheImport(texts) {
+        if (!texts || !texts.length) return;
+        const seen = new Set();
+        texts.forEach((t) => {
+            if (!t || seen.has(t) || TtsCache.has(t)) return;
+            seen.add(t);
+            fetchTTSViaProxy(t).catch(() => {});   // 静默后台下载
+        });
+    }
+
+
     async function speak(text, rate = 0.9, wordId = null) {
         // 0. 用户自己的录音优先
         if (wordId && window.Recordings && Recordings.hasCached(wordId)) {
@@ -218,9 +348,22 @@ const Audio = (() => {
                 } catch (e) { /* 忽略，回退 */ }
             }
         }
+        // 2.5 导入词音频缓存（IndexedDB，CORS 代理下载，离线可播）
+        if (korean) {
+            const cachedURL = TtsCache.getURL(korean);
+            if (cachedURL) {
+                try { if (await playBlobURL(cachedURL, rate)) return true; } catch (e) { /* 忽略，回退 */ }
+            }
+        }
         if (!text) return false;
-        // 3. 以上均无本地文件：系统语音 / 在线 TTS
-        //    （导入全新词首次联网会被 SW 缓存，之后离线也能响）
+        // 3. 联网时尝试 CORS 代理下载百度 TTS 并播放（导入全新词首发音走这里，成功即缓存离线可播）
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+            try {
+                const proxyURL = await fetchTTSViaProxy(korean || text);
+                if (proxyURL && await playBlobURL(proxyURL, rate)) return true;
+            } catch (e) { /* 忽略，回退下方 */ }
+        }
+        // 4. 以上均无本地文件：系统语音 / 在线 TTS（SW 会缓存在线 TTS 供离线）
         if (useLocalNow() && synthesis) {
             return speakLocal(text, rate);
         }
@@ -418,6 +561,26 @@ const Audio = (() => {
         getLastError,
         cleanTextForTTS,
         diagnose,
+        precacheImport,
+        getProxy,
+        setProxy,
+        clearTtsCache: () => TtsCache.clearAll(),
+        diagnoseImport: async (text) => {
+            const t = (text || '').trim();
+            const steps = [];
+            steps.push({ name: '系统韩语语音', ok: !!(synthesis && koreanVoice), err: (synthesis && koreanVoice) ? '' : '无韩语语音包' });
+            const fn = await lookupKo(t);
+            steps.push({ name: '本地音频包(ko_index)', ok: !!fn, err: fn ? '' : '未命中' });
+            const cu = TtsCache.getURL(t);
+            steps.push({ name: '导入词音频缓存', ok: !!cu, err: cu ? '' : '未缓存' });
+            let proxyOk = false, proxyErr = '';
+            try {
+                const u = await fetchTTSViaProxy(t);
+                proxyOk = !!u; if (!u) proxyErr = '下载失败/返回非音频';
+            } catch (e) { proxyErr = String((e && e.message) || e); }
+            steps.push({ name: 'CORS代理下载百度TTS', ok: proxyOk, err: proxyErr });
+            return { text: t, steps, proxy: getProxy() };
+        },
         isTTSSupported,
         isRecordingSupported
     };

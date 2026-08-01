@@ -493,6 +493,16 @@
                             <span class="me-hint">版本 <span id="app-version">—</span></span>
                         </div>
                         <div id="tts-diag-out" class="tts-diag-out hidden"></div>
+                        <div style="margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">
+                            <h4 class="import-h3">📥 导入词发音（联网下载并缓存到本机）</h4>
+                            <p class="me-hint">导入的「全新词」会联网从百度 TTS 下载音频、存到本机，之后离线也能播。若你的网络访问公共代理不通而没声音，可换一个 CORS 代理地址（留空用默认公共代理）。</p>
+                            <div class="me-actions">
+                                <input id="tts-proxy" style="width:60%;max-width:340px;padding:6px 10px;border:1px solid var(--border);border-radius:10px;font-size:14px;" placeholder="CORS 代理地址（留空用默认公共代理）">
+                                <button class="btn-mini" id="tts-proxy-save">保存代理</button>
+                                <button class="btn-mini" id="tts-import-diag">🔍 测导入词发音</button>
+                            </div>
+                            <div id="tts-import-diag-out" class="tts-diag-out hidden"></div>
+                        </div>
                     </div>
 
                     <div class="me-card">

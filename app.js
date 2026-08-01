@@ -2513,7 +2513,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v53';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v54';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
@@ -2554,6 +2554,44 @@ function bindTtsMode() {
   const diag = $el('tts-diag');
   if (diag && diag.addEventListener) {
     diag.addEventListener('click', () => runTtsDiagnostics());
+  }
+
+  // 导入词发音代理配置 + 诊断
+  const proxyInput = $el('tts-proxy');
+  if (proxyInput && !proxyInput.value) {
+    try { proxyInput.value = (Audio.getProxy ? Audio.getProxy() : ''); } catch (e) { /* 忽略 */ }
+  }
+  const proxySave = $el('tts-proxy-save');
+  if (proxySave && proxySave.addEventListener) {
+    proxySave.addEventListener('click', () => {
+      try {
+        if (Audio.setProxy) Audio.setProxy(proxyInput ? proxyInput.value : '');
+        toast('发音代理已保存（留空则用默认公共代理）', 'success');
+        if (Audio.clearTtsCache) Audio.clearTtsCache();
+      } catch (e) { toast('保存失败', 'error'); }
+    });
+  }
+  const impDiag = $el('tts-import-diag');
+  if (impDiag && impDiag.addEventListener) {
+    impDiag.addEventListener('click', async () => {
+      const t = window.prompt('输入一个你导入过的韩语词（测试发音链路）：', '');
+      if (t == null) return;
+      const out = $el('tts-import-diag-out');
+      if (!out) return;
+      out.classList.remove('hidden');
+      out.innerHTML = '<div>诊断中…</div>';
+      try {
+        const r = await Audio.diagnoseImport(t.trim());
+        let html = '<div><b>导入词发音诊断：' + escapeHtml(r.text) + '</b></div>';
+        html += '<div class="dim">代理：' + escapeHtml(r.proxy) + '</div>';
+        (r.steps || []).forEach(s => {
+          html += '<div>' + escapeHtml(s.name) + '：' + (s.ok ? '<span class="ok">✔ 可用</span>' : '<span class="fail">✘ ' + escapeHtml(s.err || '失败') + '</span>') + '</div>';
+        });
+        out.innerHTML = html;
+      } catch (e) {
+        out.innerHTML = '<div class="fail">诊断出错：' + escapeHtml(String((e && e.message) || e)) + '</div>';
+      }
+    });
   }
 }
 

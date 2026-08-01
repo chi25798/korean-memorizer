@@ -225,12 +225,12 @@ body {
    width 用 calc(100%/zoom) 抵消 zoom 引起的横向溢出，max-width+margin:auto 实现居中留白。 */
 #page-import,
 #page-me {
-    max-width: 1000px;
+    max-width: 717px;            /* layout 宽；zoom 1.06 后视觉最大 ~760px，桌面/平板居中留白 */
     margin: 0 auto;
-    width: calc(100% / 1.06);
+    width: calc(100% / 1.06);     /* 抵消 zoom 引起的横向溢出 */
     zoom: 1.06;
     box-sizing: border-box;
-    padding: 10px 20px 28px;
+    padding: 10px 16px 28px;
 }
 
 /* ===== 首页 ===== */
