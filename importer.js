@@ -60,7 +60,9 @@ function isNoiseLine(line) {
  *   한국어 | 中文
  *   한국어,中文
  *   한국어[名]中文
- *   한국어 (发音) 中文
+ *   한국어（你好）        ← 韩语在前，中文用全角/半角括号括起来
+ *   你好（안녕하세요）    ← 中文在前，韩语用括号括起来
+ *   안녕하세요你好        ← 韩前中后无分隔
  */
 function parseLine(line) {
     let t = line.replace(/\s+/g, ' ').trim();
@@ -70,15 +72,15 @@ function parseLine(line) {
     const out = [];
 
     // 情形 A：一行内多个「한국어[词性]中文」
-    const inlineRe = new RegExp('([' + HANGUL + '][' + HANGUL + '\\s\\-~()ㆍ.]*?)\\s*\\[([^\\]]{1,6})\\]\\s*([\\u4E00-\\u9FFF][^\\[]{0,30})', 'g');
+    const inlineRe = new RegExp('([' + HANGUL + '][' + HANGUL + '\\s\\-~()ㆍ.（）]*?)\\s*\\[([^\\]]{1,6})\\]\\s*([\\u4E00-\\u9FFF][^\\[]{0,30})', 'g');
     let m;
     while ((m = inlineRe.exec(t)) !== null) {
         out.push({ korean: m[1].trim(), chinese: m[3].trim().replace(/[,，;；]$/, '') });
     }
     if (out.length) return out;
 
-    // 情形 B：明确分隔符
-    const parts = t.split(/\t+|\s*[|｜]\s*|\s*[,，]\s*|\s{2,}|\s*[:：]\s*/).filter(x => x.trim());
+    // 情形 B：明确分隔符（| , : tab 多空格 －）
+    const parts = t.split(/\t+|\s*[|｜]\s*|\s*[,，]\s*|\s{2,}|\s*[:：\-－]\s*/).filter(x => x.trim());
     if (parts.length >= 2) {
         const ko = parts.find(p => RE_HAS_HANGUL.test(p));
         const zh = parts.find(p => RE_HAS_CJK.test(p) && !RE_HAS_HANGUL.test(p));
@@ -87,9 +89,29 @@ function parseLine(line) {
         }
     }
 
-    // 情形 C：韩文在前中文在后，中间无分隔
-    const re = new RegExp('^([' + HANGUL + '][' + HANGUL + '\\s\\-~()ㆍ./]*)\\s*([\\u4E00-\\u9FFF].*)$');
-    const mm = t.match(re);
+    // 情形 C：括号包裹的「次要语言」
+    //   안녕하세요（你好） → 韩语在外、中文在（）内
+    //   你好（안녕하세요） → 中文在外、韩语在（）内
+    const parenRe = /[（(]([^（）()]{1,40})[)）]/g;
+    const parenGroups = [];
+    let pm;
+    while ((pm = parenRe.exec(t)) !== null) parenGroups.push(pm[1]);
+    if (parenGroups.length) {
+        const outer = t.replace(/[（(][^（）()]{1,40}[)）]/g, ' ').trim();
+        const innerKo = parenGroups.find(g => RE_HAS_HANGUL.test(g));
+        const innerZh = parenGroups.find(g => RE_HAS_CJK.test(g) && !RE_HAS_HANGUL.test(g));
+        if (innerKo && RE_HAS_CJK.test(outer) && !RE_HAS_HANGUL.test(outer)) {
+            return [{ korean: cleanKo(innerKo), chinese: cleanZh(outer) }];
+        }
+        if (innerZh && RE_HAS_HANGUL.test(outer)) {
+            return [{ korean: cleanKo(outer), chinese: cleanZh(innerZh) }];
+        }
+    }
+
+    // 情形 D：韩文在前中文在后，中间无分隔（先去掉括号内容再匹配）
+    const tNoParen = t.replace(/[（(][^（）()]{1,40}[)）]/g, '').trim();
+    const re = new RegExp('^([' + HANGUL + '][' + HANGUL + '\\s\\-~ㆍ./]*)\\s*([\\u4E00-\\u9FFF].*)$');
+    const mm = tNoParen.match(re);
     if (mm) {
         return [{ korean: cleanKo(mm[1]), chinese: cleanZh(mm[2]) }];
     }
@@ -111,6 +133,9 @@ function parseEntries(text) {
     const seen = new Set();
     lines.forEach(line => {
         parseLine(line).forEach(e => {
+            // 跳过表头行（韩语,中文 / 韩文 中文 / 朝鲜语 汉语 等）
+            if (/^(韩语|韩文|朝鲜语|중국어|korean)$/i.test(e.korean.trim()) &&
+                /^(中文|汉语|중국어|chinese)$/i.test(e.chinese.trim())) return;
             if (!e.korean || !e.chinese) return;
             if (e.korean.length > 30 || e.chinese.length > 40) return;
             const key = e.korean + '|' + e.chinese;
@@ -297,7 +322,7 @@ function doParseImport() {
     }
     importCandidates = parseEntries(text).map(e => ({ ...e, checked: true }));
     if (importCandidates.length === 0) {
-        importSetStatus('没认出单词。请确认文本里每行是「韩语 + 中文」的形式。', 'error');
+        importSetStatus('没认出单词。每行请写成「韩语＋中文」的形式，例如：안녕하세요 你好 / 안녕하세요（你好）/ 你好（안녕하세요）/ 책|书', 'error');
     } else {
         importSetStatus('识别出 ' + importCandidates.length + ' 个单词，核对后点「确认导入」', 'success');
     }
