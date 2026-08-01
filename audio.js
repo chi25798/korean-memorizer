@@ -22,10 +22,11 @@ const Audio = (() => {
     const TTS_MODES = ['auto', 'online', 'local'];
     let ttsMode = 'auto';            // 'auto' | 'online' | 'local'
 
-    // 在线韩语 TTS 引擎（百度优先：短词/单字语法词也稳定；有道对短词常 500 作备用）
+    // 在线韩语 TTS 引擎：仅保留百度（国内可直连、返回 audio/mpeg）。
+    // 注：有道 dictvoice(type=2) 对韩语恒返回 500，已移除，避免浪费 800ms 切换。
+    // 百度直连不需要 CORS，<video> 可直接播放；SW 会拦截并缓存 opaque 响应，离线也能响。
     const ONLINE_TTS = [
-        { name: '百度', build: t => 'https://fanyi.baidu.com/gettts?lan=kor&text=' + encodeURIComponent(t) + '&spd=3&source=web' },
-        { name: '有道', build: t => 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(t) + '&type=2' }
+        { name: '百度', build: t => 'https://fanyi.baidu.com/gettts?lan=kor&text=' + encodeURIComponent(t) + '&spd=3&source=web' }
     ];
 
     // 移动端判断（Android / iOS / 平板）
@@ -274,21 +275,35 @@ const Audio = (() => {
         return { init, save, getURL, has, clearAll };
     })();
 
-    /** 通过 CORS 代理下载韩语 TTS 音频（真实 blob），存入 IndexedDB，返回 blobURL */
+    /** 通过 CORS 代理下载韩语 TTS 音频（真实 blob），存入 IndexedDB，返回 blobURL。
+     *  带 6s 超时（AbortController），代理失效时快速失败、绝不阻塞发音。 */
     async function fetchTTSViaProxy(text) {
         const cleaned = cleanTextForTTS(text);
         if (!cleaned) return null;
         const baidu = ONLINE_TTS[0].build(cleaned);
         const proxy = getProxy();
         const url = proxy + encodeURIComponent(baidu);
+        const ctrl = ('AbortController' in window) ? new AbortController() : null;
+        const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, 6000) : null;
         try {
-            const r = await fetch(url);
+            const r = await fetch(url, ctrl ? { signal: ctrl.signal } : undefined);
             if (!r || !r.ok) return null;
             const blob = await r.blob();
             if (!blob || blob.size < 800) return null;   // 太小多半是错误页/HTML
             await TtsCache.save(text, blob);
             return TtsCache.getURL(text);
         } catch (e) { return null; }
+        finally { if (timer) clearTimeout(timer); }
+    }
+
+    /** 后台不阻塞地尝试用代理缓存导入词音频（仅当用户配置了可用代理才有意义；
+     *  默认公共代理 allorigins 已失效，直接跳过以免浪费）。 */
+    function cacheImportInBackground(text) {
+        try {
+            const proxy = getProxy();
+            if (!proxy || proxy === 'https://api.allorigins.win/raw?url=') return;
+            fetchTTSViaProxy(text).catch(() => {});
+        } catch (e) { /* 忽略 */ }
     }
 
     /** 用常驻 video 元素播放 blobURL */
@@ -348,7 +363,7 @@ const Audio = (() => {
                 } catch (e) { /* 忽略，回退 */ }
             }
         }
-        // 2.5 导入词音频缓存（IndexedDB，CORS 代理下载，离线可播）
+        // 2.5 已缓存的导入词音频（IndexedDB，之前用代理下载成功过）
         if (korean) {
             const cachedURL = TtsCache.getURL(korean);
             if (cachedURL) {
@@ -356,18 +371,22 @@ const Audio = (() => {
             }
         }
         if (!text) return false;
-        // 3. 联网时尝试 CORS 代理下载百度 TTS 并播放（导入全新词首发音走这里，成功即缓存离线可播）
-        if (typeof navigator === 'undefined' || navigator.onLine !== false) {
-            try {
-                const proxyURL = await fetchTTSViaProxy(korean || text);
-                if (proxyURL && await playBlobURL(proxyURL, rate)) return true;
-            } catch (e) { /* 忽略，回退下方 */ }
-        }
-        // 4. 以上均无本地文件：系统语音 / 在线 TTS（SW 会缓存在线 TTS 供离线）
+        // 3. 在线发音（百度直连，立即可播，无需 CORS）
+        //    SW 会拦截百度请求并以 no-cors 缓存 opaque 响应，首次联网发音后离线也能响。
+        //    ⚠️ 关键：绝不在这里 await CORS 代理下载——公共代理常失效/超时，会把发音卡住没声音。
+        //       代理缓存仅作为「后台不阻塞」的加分项（见 cacheImportInBackground）。
+        try {
+            const ok = await speakOnline(korean, rate);
+            if (ok) {
+                cacheImportInBackground(korean);   // 失败不影响本次发音
+                return true;
+            }
+        } catch (e) { /* 忽略，回退下方 */ }
+        // 4. 系统语音兜底（桌面有韩语语音包 / 或用户强制「系统发音」模式）
         if (useLocalNow() && synthesis) {
             return speakLocal(text, rate);
         }
-        return speakOnline(text);
+        return false;
     }
 
     /**
@@ -496,6 +515,37 @@ const Audio = (() => {
     /** 最近一次在线发音失败原因（诊断用） */
     function getLastError() { return lastErr; }
 
+    /** 实测百度直连是否可播放：用隐藏 <video> 加载跨域媒体（无需 CORS 也能拿到 metadata）。
+     *  成功（oncanplay/onloadedmetadata）即代表该词在线发音可用。 */
+    function testBaiduPlayable(text) {
+        return new Promise((resolve) => {
+            const cleaned = cleanTextForTTS(text);
+            if (!cleaned) { resolve({ ok: false, err: '文本无法清理为韩语' }); return; }
+            const url = ONLINE_TTS[0].build(cleaned);
+            let v = null;
+            try {
+                v = document.createElement('video');
+                v.preload = 'metadata';
+                v.muted = true;
+                // 屏幕外、非 display:none，规避个别浏览器对隐藏媒体的特殊处理
+                v.style.position = 'fixed';
+                v.style.left = '-9999px';
+                v.style.width = '1px'; v.style.height = '1px'; v.style.opacity = '0.01';
+            } catch (e) { resolve({ ok: false, err: '无法创建媒体元素' }); return; }
+            let done = false;
+            const finish = (ok, err) => {
+                if (done) return; done = true;
+                try { v.removeAttribute('src'); v.load(); } catch (e) { /* 忽略 */ }
+                resolve({ ok, err });
+            };
+            const to = setTimeout(() => finish(false, '超时（网络不可达/被拦截）'), 6000);
+            v.oncanplay = () => { clearTimeout(to); finish(true); };
+            v.onloadedmetadata = () => { clearTimeout(to); finish(true); };
+            v.onerror = () => { clearTimeout(to); finish(false, '加载失败（可能被网络拦截）'); };
+            v.src = url; v.load();
+        });
+    }
+
     /** 发音环境诊断信息（供「我的」页一键诊断按钮展示） */
     function diagnose() {
         return {
@@ -568,18 +618,15 @@ const Audio = (() => {
         diagnoseImport: async (text) => {
             const t = (text || '').trim();
             const steps = [];
-            steps.push({ name: '系统韩语语音', ok: !!(synthesis && koreanVoice), err: (synthesis && koreanVoice) ? '' : '无韩语语音包' });
+            steps.push({ name: '系统韩语语音', ok: !!(synthesis && koreanVoice), err: (synthesis && koreanVoice) ? '' : '无韩语语音包（用在线发音即可）' });
             const fn = await lookupKo(t);
-            steps.push({ name: '本地音频包(ko_index)', ok: !!fn, err: fn ? '' : '未命中' });
+            steps.push({ name: '本地音频包(ko_index)', ok: !!fn, err: fn ? '' : '未命中（非教材词，正常）' });
             const cu = TtsCache.getURL(t);
-            steps.push({ name: '导入词音频缓存', ok: !!cu, err: cu ? '' : '未缓存' });
-            let proxyOk = false, proxyErr = '';
-            try {
-                const u = await fetchTTSViaProxy(t);
-                proxyOk = !!u; if (!u) proxyErr = '下载失败/返回非音频';
-            } catch (e) { proxyErr = String((e && e.message) || e); }
-            steps.push({ name: 'CORS代理下载百度TTS', ok: proxyOk, err: proxyErr });
-            return { text: t, steps, proxy: getProxy() };
+            steps.push({ name: '导入词音频缓存', ok: !!cu, err: cu ? '' : '未缓存（首次发音后 SW 会自动缓存）' });
+            // 实测百度直连是否可播放（<video> 加载跨域媒体不需要 CORS）
+            const play = await testBaiduPlayable(t);
+            steps.push({ name: '在线发音(百度直连)', ok: play.ok, err: play.ok ? '' : (play.err || '无法播放') });
+            return { text: t, steps, proxy: getProxy(), note: '百度直连即��发音路径，无需 CORS 代理' };
         },
         isTTSSupported,
         isRecordingSupported
