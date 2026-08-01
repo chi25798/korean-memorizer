@@ -71,6 +71,11 @@ function parseLine(line) {
     if (!t || isNoiseLine(t)) return [];
     if (!RE_HAS_HANGUL.test(t) || !RE_HAS_CJK.test(t)) return [];
 
+    // 英文=韩文 中文（可带序号 2. / 10.、英文可含空格、中文可含顿号），
+    // 必须在此整体解析；否则下面的「按、拆条」会把中文含义里的顿号误拆。
+    const eqRes = parseEnglishEq(t);
+    if (eqRes) return eqRes;
+
     // 一行内可能用「、；;」并列了多个词条，先拆成单条再逐个解析，
     // 避免「只认出第一个」的问题。（「，」/「,」/「|」留作单条内部的韩中分隔符，不在此拆。）
     const clauses = t.split(/[、；;]+/).map(s => s.trim()).filter(Boolean);
@@ -80,6 +85,38 @@ function parseLine(line) {
         return res;
     }
     return parseSingle(t);
+}
+
+/**
+ * 识别「英文=韩文 中文」格式，例如：
+ *   2. snowboard=스노보드 滑雪板
+ *   4. fantasy=판타지 奇幻、科幻
+ *   9. coffee shop=커피숍 咖啡厅
+ *   10. Hollywood=할리우드 好莱坞
+ * 左侧英文：可含空格（coffee shop）、可带序号（2. / 10. / (2)）；
+ * 右侧：韩文在前、中文（可含顿号、）在后，中间用空格分隔。
+ * 返回 [{korean, chinese}]，不匹配返回 null。英文仅作来源标注，不存入词库。
+ */
+function parseEnglishEq(line) {
+    let t = line.trim();
+    // 去掉序号：2.  10.  (2)  （数字 + . 或 ) + 可选空格）
+    t = t.replace(/^\s*\d+[\.\)]\s*/, '');
+    const eq = t.indexOf('=');
+    if (eq < 0) return null;
+    const left = t.slice(0, eq).trim();        // 英文（可能含空格）
+    const right = t.slice(eq + 1).trim();       // 韩文 中文
+    if (!left || !right) return null;
+    if (!RE_HAS_HANGUL.test(right) || !RE_HAS_CJK.test(right)) return null;
+
+    // 情形1：韩文（开头连续韩文）+ 空格 + 中文
+    let m = right.match(new RegExp('^([' + HANGUL + ']+)\\s+(.+)$'));
+    if (m) return [{ korean: m[1].trim(), chinese: m[2].trim() }];
+
+    // 情形2（退化）：韩文与中文紧贴、中间无空格，按首个汉字切分
+    m = right.match(new RegExp('^([' + HANGUL + ']+?)([\\u4E00-\\u9FFF].*)$'));
+    if (m) return [{ korean: m[1].trim(), chinese: m[2].trim() }];
+
+    return null;
 }
 
 /** 解析单条（已不含并列分隔符） */
