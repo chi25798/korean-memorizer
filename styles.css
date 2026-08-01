@@ -49,14 +49,16 @@ body {
     font-family: 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
     background: var(--bg);
     color: var(--text-main);
-    height: 100vh;
+    height: 100vh;          /* 兜底（旧浏览器） */
+    height: 100dvh;         /* 动态视口高度：自动排除手机/平板浏览器底栏，避免底部留白被遮 */
     overflow: hidden;
 }
 
 #app {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100vh;          /* 兜底 */
+    height: 100dvh;         /* 同 body：排除浏览器底栏 */
 }
 
 /* ===== 侧边栏 ===== */
@@ -187,8 +189,9 @@ body {
     flex: 1;
     overflow-y: auto;
     /* 顶部/左右保持原样；底部留较大余白，避免最后一课（如第四册第35课）
-       在移动端被浏览器底栏遮挡、贴边不好看。影响所有页面。 */
-    padding: 24px 36px 64px;
+       在移动端被浏览器底栏遮挡、贴边不好看。影响所有页面。
+       含 env(safe-area-inset-bottom) 以兼容刘海/Home 指示条设备。 */
+    padding: 24px 36px calc(64px + env(safe-area-inset-bottom, 0px));
 }
 
 .page {
@@ -3157,7 +3160,8 @@ body {
         grid-template-columns: 1fr;
     }
     .main-content {
-        padding: 20px;
+        /* 移动端同样保留充足底部留白（含安全区），之前这里写成 20px 把桌面设的 64px 覆盖掉了 */
+        padding: 20px 20px calc(72px + env(safe-area-inset-bottom, 0px));
     }
     .word-korean {
         font-size: 36px;
