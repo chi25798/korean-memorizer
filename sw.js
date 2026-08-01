@@ -1,7 +1,7 @@
 /* 韩语背诵 - Service Worker
  * 策略：网络优先（保证加新册后刷新即更新），断网时回退缓存。
  */
-const CACHE = 'korean-memorizer-v62';
+const CACHE = 'korean-memorizer-v63';
 const ASSETS = [
   './', './index.html', './styles.css', './ink-theme.css',
   './data.js', './profiles.js', './srs.js', './audio.js',
@@ -23,39 +23,15 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// 是否为在线韩语 TTS 请求（百度/有道）
-function isTTSRequest(url) {
-  return /fanyi\.baidu\.com\/gettts/.test(url.href) ||
-         /dict\.youdao\.com\/dictvoice/.test(url.href);
-}
-
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // 跨域 TTS：用 no-cors 抓取并缓存 opaque 响应。
-  // 关键：浏览器 <video>/<audio> 直接加载跨域媒体不受 CORS 限制，
-  // 而 SW 用 no-cors fetch 能把跨域 TTS 响应缓存进 Cache Storage，
-  // 使导入的新单词首次联网发音后、离线也能响（本地发音包只覆盖内置词）。
-  if (isTTSRequest(url)) {
-    e.respondWith(
-      caches.open(CACHE).then((cache) =>
-        cache.match(req).then((cached) => {
-          if (cached) return cached;            // 离线 / 二次命中
-          return fetch(req, { mode: 'no-cors' })
-            .then((res) => {
-              cache.put(req, res.clone()).catch(() => {});
-              return res;
-            })
-            .catch(() => cached || Response.error());
-        })
-      )
-    );
-    return;
-  }
-
-  if (url.origin !== self.location.origin) return;  // 其他跨域不处理
+  // 在线韩语 TTS（百度 gettts 等跨域媒体）不拦截：让 <video>/<audio> 直连请求，
+  // 浏览器原生支持跨域媒体播放（无需 CORS）。
+  // 若 SW 用 no-cors 拦截并回传 opaque 响应，Chromium 系（夸克/Chrome）会拒绝用于媒体播放 → 发音失败。
+  if (url.origin !== self.location.origin) return;  // 跨域一律不处理，直达网络
   e.respondWith(
     fetch(req)
       .then((res) => {

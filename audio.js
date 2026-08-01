@@ -24,7 +24,7 @@ const Audio = (() => {
 
     // 在线韩语 TTS 引擎：仅保留百度（国内可直连、返回 audio/mpeg）。
     // 注：有道 dictvoice(type=2) 对韩语恒返回 500，已移除，避免浪费 800ms 切换。
-    // 百度直连不需要 CORS，<video> 可直接播放；SW 会拦截并缓存 opaque 响应，离线也能响。
+    // 百度直连不需要 CORS，<video> 可直接播放；SW 不拦截该跨域请求（拦截并回传 opaque 响应会导致 Chromium 系无法播放）。
     const ONLINE_TTS = [
         { name: '百度', build: t => 'https://fanyi.baidu.com/gettts?lan=kor&text=' + encodeURIComponent(t) + '&spd=3&source=web' }
     ];
@@ -372,7 +372,7 @@ const Audio = (() => {
         }
         if (!text) return false;
         // 3. 在线发音（百度直连，立即可播，无需 CORS）
-        //    SW 会拦截百度请求并以 no-cors 缓存 opaque 响应，首次联网发音后离线也能响。
+        //    SW 不拦截该跨域请求，<video> 原生直连播放；导入全新词需联网（或预生成本地音频包实现离线）。
         //    ⚠️ 关键：绝不在这里 await CORS 代理下载——公共代理常失效/超时，会把发音卡住没声音。
         //       代理缓存仅作为「后台不阻塞」的加分项（见 cacheImportInBackground）。
         try {
