@@ -1,12 +1,13 @@
 /* 韩语背诵 - Service Worker
  * 策略：网络优先（保证加新册后刷新即更新），断网时回退缓存。
  */
-const CACHE = 'korean-memorizer-v48';
+const CACHE = 'korean-memorizer-v49';
 const ASSETS = [
   './', './index.html', './styles.css', './ink-theme.css',
   './data.js', './profiles.js', './srs.js', './audio.js',
   './recordings.js', './importer.js', './app.js',
-  './manifest.json', './icon-192.png', './icon-512.png'
+  './manifest.json', './icon-192.png', './icon-512.png',
+  './audio/ko_index.json'
 ];
 
 self.addEventListener('install', (e) => {

@@ -145,10 +145,34 @@ const Audio = (() => {
     // 本地发音包：优先播放预下载的 audio/<wordId>.mp3
     // 这样即使手机没有韩语语音包、在线 TTS 被墙/超时，也能稳定离线发音。
     const AUDIO_BASE = 'audio/';
-    function playLocalAudio(wordId, rate) {
+
+    // 文本 -> 本地音频文件名 索引（ko_index.json，约 67KB，覆盖 3148 个内置词）
+    // 导入词的韩语文本若与内置词相同，即可直接命中本地发音；
+    // 全新词经「桌面补录脚本」下载后也会写入该索引，实现纯本地离线发音。
+    let koIndex = null;
+    let koIndexLoading = null;
+    function loadKoIndex() {
+        if (koIndex) return Promise.resolve(koIndex);
+        if (koIndexLoading) return koIndexLoading;
+        koIndexLoading = fetch(AUDIO_BASE + 'ko_index.json')
+            .then((r) => (r && r.ok ? r.json() : null))
+            .then((j) => { koIndex = j || {}; return koIndex; })
+            .catch(() => { koIndex = {}; return koIndex; });
+        return koIndexLoading;
+    }
+    async function lookupKo(text) {
+        const t = (text || '').trim();
+        if (!t) return null;
+        try { await loadKoIndex(); } catch (e) { /* 忽略 */ }
+        if (koIndex && koIndex[t]) return koIndex[t];
+        return null;
+    }
+
+    // 播放本地发音包音频（audio/<filename>.mp3）。文件缺失则 3.5s 超时回退。
+    function playLocalFile(filename, rate) {
         return new Promise((resolve) => {
-            if (!wordId) { resolve(false); return; }
-            const url = AUDIO_BASE + encodeURIComponent(wordId) + '.mp3';
+            if (!filename) { resolve(false); return; }
+            const url = AUDIO_BASE + encodeURIComponent(filename) + '.mp3';
             const a = ensureAudioEl();
             if (!a) { resolve(false); return; }
             let settled = false;
@@ -165,23 +189,38 @@ const Audio = (() => {
         });
     }
 
+    const isBuiltinId = (id) => id && /^w-\d/.test(id);
+
     async function speak(text, rate = 0.9, wordId = null) {
+        // 0. 用户自己的录音优先
         if (wordId && window.Recordings && Recordings.hasCached(wordId)) {
             try {
                 const ok = await Recordings.play(wordId);
                 if (ok) return true;
             } catch (e) { /* 忽略，回退 TTS */ }
         }
-        // 优先用本地发音包（离线可靠）；仅内置词 id 形如 w-... 才有本地文件，
-        // 导入词（ul-...）无本地文件，跳过 3.5s 等待直接走在线 TTS（由 SW 缓存离线可用）
-        const maybeLocal = wordId && /^w-\d/.test(wordId);
-        if (maybeLocal) {
+        const korean = text || '';
+        // 1. 内置词：按 wordId 直接播本地音频（离线可靠）
+        if (isBuiltinId(wordId)) {
             try {
-                const ok = await playLocalAudio(wordId, rate);
+                const ok = await playLocalFile(wordId, rate);
                 if (ok) return true;
-            } catch (e) { /* 忽略，回退 TTS */ }
+            } catch (e) { /* 忽略，回退 */ }
+        }
+        // 2. 按韩语文本查 ko_index -> 本地音频
+        //    （导入词若文本命中教材词，立刻纯本地响；全新词经补录脚本也可命中）
+        if (korean) {
+            const fn = await lookupKo(korean);
+            if (fn) {
+                try {
+                    const ok = await playLocalFile(fn, rate);
+                    if (ok) return true;
+                } catch (e) { /* 忽略，回退 */ }
+            }
         }
         if (!text) return false;
+        // 3. 以上均无本地文件：系统语音 / 在线 TTS
+        //    （导入全新词首次联网会被 SW 缓存，之后离线也能响）
         if (useLocalNow() && synthesis) {
             return speakLocal(text, rate);
         }
