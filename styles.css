@@ -2279,7 +2279,7 @@ body {
 .vocab-sidebar {
     width: 270px;
     flex-shrink: 0;
-    max-height: calc(100vh - 190px);
+    max-height: calc(var(--app-h, 100vh) - 190px);
     overflow-y: auto;
     background: var(--card-bg);
     border-radius: var(--radius);
@@ -2378,9 +2378,21 @@ body {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    max-height: calc(100vh - 260px);
+    max-height: calc(var(--app-h, 100vh) - 220px);
     overflow-y: auto;
     padding-right: 6px;
+    position: relative;   /* 作为左侧导航跳转时 offsetTop 的参照，仅滚动自身 */
+}
+
+/* 词库页头常驻：点击左侧导航时整页不再把它（词林/搜索）滚出视口 */
+#page-vocab .page-header {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    background: var(--bg);
+    padding-top: 4px;
+    padding-bottom: 12px;
+    margin-bottom: 0;
 }
 
 /* 移动端：左侧课程选择收成「顶部横向滚动条」，单词区占满整行，

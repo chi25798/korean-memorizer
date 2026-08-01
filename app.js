@@ -620,23 +620,59 @@ function renderPlanDetail() {
         return;
     }
 
+    // 按「册 / 书名」分组，每册可折叠
+    const map = {};
     lessons.forEach(lesson => {
-        const ws = lesson.wordStats;
-        const wordPct = ws.total > 0 ? (ws.learned / ws.total * 100) : 0;
+        const g = lessonGroupInfo(lesson);
+        if (!map[g.key]) map[g.key] = { key: g.key, label: g.label, sort: g.sort, isNum: g.isNum, lessons: [] };
+        map[g.key].lessons.push(lesson);
+    });
+    const arr = Object.keys(map).map(k => map[k]);
+    arr.sort((a, b) => {
+        if (a.isNum && b.isNum) return a.sort - b.sort;
+        if (a.isNum) return -1;
+        if (b.isNum) return 1;
+        return String(a.sort).localeCompare(String(b.sort), 'zh');
+    });
 
-        const row = document.createElement('div');
-        row.className = 'pdr-item';
-        row.innerHTML = `
-            <div class="pdr-title">${lesson.title}</div>
-            <div class="pdr-bars">
-                <div class="pdr-bar-row">
-                    <span class="pdr-bar-label">词</span>
-                    <div class="pdr-bar"><div class="pdr-bar-fill word-fill" style="width:${wordPct}%"></div></div>
-                    <span class="pdr-bar-num">${ws.learned}/${ws.total}</span>
+    arr.forEach(g => {
+        const volBlock = document.createElement('div');
+        volBlock.className = 'learn-volume-block';
+        const volHead = document.createElement('div');
+        volHead.className = 'learn-volume-head';
+        volHead.setAttribute('data-plan-vol', g.key);
+        volHead.innerHTML = `<span class="vcaret">▾</span><span class="vvt-label">${escapeHtml(g.label)}</span><span class="vvol-count">${g.lessons.length} 课</span>`;
+        const volBody = document.createElement('div');
+        volBody.className = 'learn-volume-body';
+
+        g.lessons.forEach(lesson => {
+            const ws = lesson.wordStats;
+            const wordPct = ws.total > 0 ? (ws.learned / ws.total * 100) : 0;
+            const row = document.createElement('div');
+            row.className = 'pdr-item';
+            row.innerHTML = `
+                <div class="pdr-title">${lesson.title}</div>
+                <div class="pdr-bars">
+                    <div class="pdr-bar-row">
+                        <span class="pdr-bar-label">词</span>
+                        <div class="pdr-bar"><div class="pdr-bar-fill word-fill" style="width:${wordPct}%"></div></div>
+                        <span class="pdr-bar-num">${ws.learned}/${ws.total}</span>
+                    </div>
                 </div>
-            </div>
-        `;
-        container.appendChild(row);
+            `;
+            volBody.appendChild(row);
+        });
+
+        // 点册头折叠/展开
+        volHead.addEventListener('click', () => {
+            const hidden = volBody.classList.toggle('collapsed');
+            const caret = volHead.querySelector('.vcaret');
+            if (caret) caret.textContent = hidden ? '▸' : '▾';
+        });
+
+        volBlock.appendChild(volHead);
+        volBlock.appendChild(volBody);
+        container.appendChild(volBlock);
     });
 }
 
@@ -1962,15 +1998,17 @@ function renderVocabSidebar() {
             item.className = 'vocab-lesson-item';
             item.innerHTML = `<span class="vli-title">${escapeHtml(l.title)}</span><span class="vli-count">${l.wordIds.length}</span>`;
             item.addEventListener('click', () => {
-                // 若该册被折叠，先展开再滚动
+                // 若该册被折叠，先展开
                 const vl = volEl.querySelector('.vocab-lesson-list');
                 const vt = volEl.querySelector('.vocab-volume-title .vcaret');
                 if (vl && vl.classList.contains('collapsed')) {
                     vl.classList.remove('collapsed');
                     if (vt) vt.textContent = '▾';
                 }
+                // 只滚动右侧单词列表自身，避免整页跳动把页头（词林/搜索）带出视口
                 const target = document.getElementById('vocab-lesson-' + l.id);
-                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const listEl = document.getElementById('vocab-word-list');
+                if (target && listEl) listEl.scrollTop = Math.max(0, target.offsetTop - 8);
             });
             list.appendChild(item);
         });
@@ -2513,7 +2551,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v57';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v58';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
