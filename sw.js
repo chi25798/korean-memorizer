@@ -1,7 +1,7 @@
 /* 韩语背诵 - Service Worker
  * 策略：网络优先（保证加新册后刷新即更新），断网时回退缓存。
  */
-const CACHE = 'korean-memorizer-v65';
+const CACHE = 'korean-memorizer-v66';
 const ASSETS = [
   './', './index.html', './styles.css', './ink-theme.css',
   './data.js', './profiles.js', './srs.js', './audio.js',
@@ -35,7 +35,7 @@ self.addEventListener('fetch', (e) => {
         const cached = await cache.match(req);
         if (cached) return cached;
         try {
-          const res = await fetch(req, { mode: 'cors' });
+          const res = await fetch(req);
           if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
           return res;
         } catch (err) {

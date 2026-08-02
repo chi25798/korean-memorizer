@@ -184,40 +184,39 @@ const Audio = (() => {
         return null;
     }
 
-    // 播放本地发音包音频（CDN 上的 <filename>.mp3）。单个 CDN 失败自动切下一个，全部失败回退 TTS。
-    function playLocalFile(filename, rate) {
-        return new Promise((resolve) => {
-            if (!filename) { resolve(false); return; }
-            const a = ensureAudioEl();
-            if (!a) { resolve(false); return; }
-            let settled = false;
-            const finish = (ok) => {
-                if (settled) return;
-                settled = true;
-                try { a.onerror = null; a.onplaying = null; } catch (e) { /* 忽略 */ }
-                resolve(ok);
-            };
-            let idx = 0;
-            const tryOne = () => {
-                if (settled) return;
-                if (idx >= CDN_BASES.length) { finish(false); return; }
-                const url = CDN_BASES[idx++] + encodeURIComponent(filename) + '.mp3';
-                let localDone = false;
-                const onOk = () => { if (localDone || settled) return; localDone = true; finish(true); };
-                const onErr = () => { if (localDone || settled) return; localDone = true; tryOne(); };
-                try { a.onerror = null; a.onplaying = null; } catch (e) { /* 忽略 */ }
-                a.onplaying = onOk;
-                a.onerror = onErr;
-                a.volume = 1; a.muted = false;
-                try { a.playbackRate = rate || 1; } catch (e) { /* 忽略 */ }
-                a.src = url; a.load();
-                const p = a.play();
-                if (p && p.then) p.then(() => setTimeout(() => { if (!localDone && !settled) { localDone = true; finish(true); } }, 300)).catch(() => { if (!localDone && !settled) { localDone = true; tryOne(); } });
-                // 单个 CDN 2.5s 内没出声 → 切下一个 CDN
-                setTimeout(() => { if (!localDone && !settled) { localDone = true; tryOne(); } }, 2500);
-            };
-            tryOne();
-        });
+    // 内置发音包走 CDN：用 fetch 拉成 blob 再本地播放，彻底绕开「媒体元素跨域」的坑
+    // （SW 若用 cors 模式重新请求媒体元素发起的 no-cors 请求，浏览器会拒绝用于播放）。
+    // 拉到的 blob 缓存进 IndexedDB（TtsCache），播过一次即离线可播；本会话再加一层内存缓存避免重复下载。
+    const builtinURLCache = new Map();   // filename -> objectURL（本会话复用）
+
+    async function fetchBuiltinBlob(filename) {
+        for (let i = 0; i < CDN_BASES.length; i++) {
+            const url = CDN_BASES[i] + encodeURIComponent(filename) + '.mp3';
+            try {
+                const ctrl = ('AbortController' in window) ? new AbortController() : null;
+                const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch (e) { /* 忽略 */ } }, 8000) : null;
+                const r = await fetch(url, ctrl ? { signal: ctrl.signal, mode: 'cors' } : { mode: 'cors' });
+                if (timer) clearTimeout(timer);
+                if (!r || !r.ok) continue;
+                const blob = await r.blob();
+                if (!blob || blob.size < 500) continue;   // 太小多半是错误页
+                return blob;
+            } catch (e) { /* 该 CDN 失败，试下一个 */ }
+        }
+        return null;
+    }
+
+    // 播放本地发音包音频（CDN 上的 <filename>.mp3，转 blob 后本地播放）。
+    async function playLocalFile(filename, rate) {
+        if (!filename) return false;
+        let url = builtinURLCache.get(filename) || TtsCache.getURL(filename);
+        if (!url) {
+            const blob = await fetchBuiltinBlob(filename);
+            if (!blob) return false;
+            try { url = URL.createObjectURL(blob); builtinURLCache.set(filename, url); } catch (e) { return false; }
+            TtsCache.save(filename, blob).catch(() => {});   // 后台持久化，失败不影响本次发音
+        }
+        return playBlobURL(url, rate);
     }
 
     const isBuiltinId = (id) => id && /^w-\d/.test(id);
