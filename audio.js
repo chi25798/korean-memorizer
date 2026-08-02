@@ -145,9 +145,15 @@ const Audio = (() => {
      * wordId 可选 —— 传了会先查内存缓存（同步），有录音才异步播放；
      * 无录音时直接走 TTS，不引入异步等待，保留移动端手势栈。
      */
-    // 本地发音包：优先播放预下载的 audio/<wordId>.mp3
-    // 这样即使手机没有韩语语音包、在线 TTS 被墙/超时，也能稳定离线发音。
-    const AUDIO_BASE = 'audio/';
+    // 本地发音包：音频托管在独立仓库 + jsDelivr CDN（不再打包进 GitHub Pages，避免大仓库构建卡顿）。
+    // 多个 CDN 兜底，确保国内可达；首次加载后由 Service Worker 缓存，离线也能播。
+    const CDN_BASES = [
+        'https://cdn.jsdelivr.net/gh/chi25798/korean-audio@main/audio/',
+        'https://fastly.jsdelivr.net/gh/chi25798/korean-audio@main/audio/',
+        'https://gcore.jsdelivr.net/gh/chi25798/korean-audio@main/audio/',
+        'https://raw.githubusercontent.com/chi25798/korean-audio/main/audio/'
+    ];
+    const AUDIO_BASE = CDN_BASES[0];  // 兼容旧引用（默认主 CDN）
 
     // 文本 -> 本地音频文件名 索引（ko_index.json，约 67KB，覆盖 3148 个内置词）
     // 导入词的韩语文本若与内置词相同，即可直接命中本地发音；
@@ -157,8 +163,15 @@ const Audio = (() => {
     function loadKoIndex() {
         if (koIndex) return Promise.resolve(koIndex);
         if (koIndexLoading) return koIndexLoading;
-        koIndexLoading = fetch(AUDIO_BASE + 'ko_index.json')
-            .then((r) => (r && r.ok ? r.json() : null))
+        const tryFetch = (i) => {
+            if (i >= CDN_BASES.length) return Promise.resolve({});
+            const url = CDN_BASES[i] + 'ko_index.json';
+            return fetch(url)
+                .then((r) => (r && r.ok ? r.json() : Promise.reject()))
+                .then((j) => j || {})
+                .catch(() => tryFetch(i + 1));
+        };
+        koIndexLoading = tryFetch(0)
             .then((j) => { koIndex = j || {}; return koIndex; })
             .catch(() => { koIndex = {}; return koIndex; });
         return koIndexLoading;
@@ -171,24 +184,39 @@ const Audio = (() => {
         return null;
     }
 
-    // 播放本地发音包音频（audio/<filename>.mp3）。文件缺失则 3.5s 超时回退。
+    // 播放本地发音包音频（CDN 上的 <filename>.mp3）。单个 CDN 失败自动切下一个，全部失败回退 TTS。
     function playLocalFile(filename, rate) {
         return new Promise((resolve) => {
             if (!filename) { resolve(false); return; }
-            const url = AUDIO_BASE + encodeURIComponent(filename) + '.mp3';
             const a = ensureAudioEl();
             if (!a) { resolve(false); return; }
             let settled = false;
-            const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
-            a.onplaying = () => finish(true);
-            a.onerror = () => finish(false);
-            a.volume = 1; a.muted = false;
-            try { a.playbackRate = rate || 1; } catch (e) { /* 忽略 */ }
-            a.src = url; a.load();
-            const p = a.play();
-            if (p && p.then) p.then(() => setTimeout(() => { if (!settled) finish(true); }, 300)).catch(() => finish(false));
-            // 3.5s 内没出声（文件缺失/被拦截）→ 视为失败，回退 TTS
-            setTimeout(() => finish(false), 3500);
+            const finish = (ok) => {
+                if (settled) return;
+                settled = true;
+                try { a.onerror = null; a.onplaying = null; } catch (e) { /* 忽略 */ }
+                resolve(ok);
+            };
+            let idx = 0;
+            const tryOne = () => {
+                if (settled) return;
+                if (idx >= CDN_BASES.length) { finish(false); return; }
+                const url = CDN_BASES[idx++] + encodeURIComponent(filename) + '.mp3';
+                let localDone = false;
+                const onOk = () => { if (localDone || settled) return; localDone = true; finish(true); };
+                const onErr = () => { if (localDone || settled) return; localDone = true; tryOne(); };
+                try { a.onerror = null; a.onplaying = null; } catch (e) { /* 忽略 */ }
+                a.onplaying = onOk;
+                a.onerror = onErr;
+                a.volume = 1; a.muted = false;
+                try { a.playbackRate = rate || 1; } catch (e) { /* 忽略 */ }
+                a.src = url; a.load();
+                const p = a.play();
+                if (p && p.then) p.then(() => setTimeout(() => { if (!localDone && !settled) { localDone = true; finish(true); } }, 300)).catch(() => { if (!localDone && !settled) { localDone = true; tryOne(); } });
+                // 单个 CDN 2.5s 内没出声 → 切下一个 CDN
+                setTimeout(() => { if (!localDone && !settled) { localDone = true; tryOne(); } }, 2500);
+            };
+            tryOne();
         });
     }
 
