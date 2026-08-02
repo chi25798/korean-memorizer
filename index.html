@@ -86,6 +86,17 @@
                     </span>
                     <span>导入</span>
                 </li>
+                <!-- 词本：难词本与错词本，自主增减、可以反复学 -->
+                <li class="nav-item" data-page="notebook">
+                    <span class="nav-icon" title="词本">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 4.2h10.4a2 2 0 0 1 2 2v13.6a1.6 1.6 0 0 0-1.6-1.6H5z"/>
+                            <path d="M5 4.2v15.6a1.6 1.6 0 0 0 1.6 1.6h10.8"/>
+                            <path d="M8.4 9.2h6M8.4 12.6h6M8.4 16h3.6"/>
+                        </svg>
+                    </span>
+                    <span>词本</span>
+                </li>
                 <!-- 云月：闲云望月，观己之功 -->
                 <li class="nav-item" data-page="me">
                     <span class="nav-icon" title="云月">
@@ -155,6 +166,7 @@
                                 <span class="btn-rate-hint">下次见</span>
                             </button>
                         </div>
+                        <button class="btn-add-notebook" id="btn-add-hard">📕 加入难词本</button>
                     </div>
                     <!-- 翻页按钮（移至卡片下方，居中） -->
                     <div class="card-nav-row">
@@ -253,6 +265,7 @@
                         <button class="btn-rate btn-fuzzy" data-flash-rate="1">😐 模糊</button>
                         <button class="btn-rate btn-known" data-flash-rate="2">😊 记住了</button>
                     </div>
+                    <button class="btn-add-notebook" id="flash-add-hard">📕 加入难词本</button>
                 </div>
 
                 <!-- 拼写复习 -->
@@ -545,7 +558,57 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 词本页：难词本 / 错词本 -->
+            <div class="page" id="page-notebook">
+                <div class="page-header">
+                    <h2>词本</h2>
+                </div>
+                <div class="nb-tabs">
+                    <button class="nb-tab active" data-nb="hard">📕 难词本 <span class="nb-count" id="nb-hard-count">0</span></button>
+                    <button class="nb-tab" data-nb="wrong">❌ 错词本 <span class="nb-count" id="nb-wrong-count">0</span></button>
+                </div>
+                <p class="nb-tip">背单词/复习里「不会」会自动进难词本，拼写写错会自动进错词本。这里可反复学习，也能自己加、自己删。</p>
+                <div class="nb-actions">
+                    <button class="btn-primary nb-btn-study" id="nb-study">▶ 开始学习</button>
+                    <button class="btn-secondary" id="nb-add">➕ 添加单词</button>
+                    <button class="btn-danger-soft" id="nb-clear">🗑 清空本</button>
+                </div>
+                <div class="nb-list" id="nb-list"></div>
+                <div class="nb-empty empty-hint hidden" id="nb-empty">这个本还是空的，去学习时遇到的难题会自动收集到这里～</div>
+            </div>
         </main>
+
+        <!-- 词本学习弹窗 -->
+        <div class="modal-overlay hidden" id="nb-study-overlay">
+            <div class="nb-study-card">
+                <div class="nb-study-progress" id="nb-study-progress"></div>
+                <div class="nb-study-korean" id="nb-study-korean"></div>
+                <div class="nb-study-pron" id="nb-study-pron"></div>
+                <button class="nb-study-speak" id="nb-study-speak" title="朗读">🔊</button>
+                <div class="nb-study-chinese hidden" id="nb-study-chinese"></div>
+                <div class="nb-study-example hidden" id="nb-study-example"></div>
+                <button class="btn-flip" id="nb-study-flip">点击显示中文</button>
+                <div class="nb-study-actions hidden" id="nb-study-actions">
+                    <button class="btn-rate btn-known" id="nb-study-known">✅ 记住了</button>
+                    <button class="btn-rate btn-unfamiliar" id="nb-study-unknown">❌ 还没记住</button>
+                </div>
+                <button class="nb-study-quit" id="nb-study-quit">退出学习</button>
+            </div>
+        </div>
+
+        <!-- 添加单词到词本（从词库搜索） -->
+        <div class="modal-overlay hidden" id="nb-add-overlay">
+            <div class="nb-add-card">
+                <h3 class="import-h3">添加单词到<span id="nb-add-target-label">难词本</span></h3>
+                <input type="text" class="nb-add-search" id="nb-add-search" placeholder="搜索韩语或中文…" autocomplete="off">
+                <div class="nb-add-list" id="nb-add-list"></div>
+                <div class="nb-add-empty empty-hint hidden" id="nb-add-empty">没有找到匹配的单词。</div>
+                <div class="nb-add-actions">
+                    <button class="btn-secondary" id="nb-add-close">关闭</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 用户切换弹窗 -->
