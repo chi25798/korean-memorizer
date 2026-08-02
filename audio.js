@@ -438,6 +438,19 @@ const Audio = (() => {
      * play().then() 也算成功（部分浏览器 onplaying 不触发但实际已出声）。
      * @returns {Promise<boolean>}
      */
+    /**
+     * 在线朗读：用常驻 <video> 直连百度 TTS 播放跨域音频（无需 CORS，国内可直连）。
+     *
+     * 历史坑（v64 修复）：早期是「双引擎」（百度 + 有道）自动切换，用 800ms 短超时判断
+     * 「当前引擎不出声就切下一个」。现在只剩百度一个引擎，这个 800ms 超时反而成了真凶——
+     * 平板上网络抖动 / 媒体解码偶尔 >800ms 未触发 onplaying，就会被直接判失败、且没有任何兜底，
+     * 表现为「联网也很多导入词不响」（内置词走本地音频包所以都正常）。
+     * 修复：
+     *  1) 仅当存在「下一个引擎」时才用 800ms 快速切换；单引擎时耐心等待 onplaying/oncanplay；
+     *  2) 额外把 oncanplay 也算成功信号（缓冲就绪即可播，避免漏判）；
+     *  3) 单引擎失败时重试一次（网络抖动自愈），6s 总兜底。
+     * @returns {Promise<boolean>}
+     */
     function speakOnline(text) {
         const seq = ++onlineSeq;
         stopLocalSpeak();
@@ -448,36 +461,43 @@ const Audio = (() => {
 
         return new Promise((resolve) => {
             let settled = false;
-            let switchTimer = null;
+            let attempts = 0;
+            const MAX_ATTEMPTS = 2;   // 同一引擎最多试 2 次（网络抖动自愈）
+
             const finish = (ok) => {
                 if (settled) return;
                 settled = true;
-                if (switchTimer) { clearTimeout(switchTimer); switchTimer = null; }
                 resolve(ok);
             };
 
             const tryEngine = (idx) => {
-                if (seq !== onlineSeq) { finish(false); return; }
+                if (seq !== onlineSeq || settled) { finish(false); return; }
                 if (idx >= ONLINE_TTS.length) { finish(false); return; }
                 const eng = ONLINE_TTS[idx];
                 let engineDone = false;
 
-                // 标记此引擎结束（成功或失败），阻止重复回调
                 const engineSettle = (ok, why) => {
                     if (engineDone || settled) return;
                     engineDone = true;
-                    if (switchTimer) { clearTimeout(switchTimer); switchTimer = null; }
                     if (ok) {
                         finish(true);
                     } else {
                         lastErr = (eng.name || '引擎' + idx) + ': ' + (why || '失败');
                         try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* 忽略 */ }
-                        tryEngine(idx + 1);   // 快速切换下一个引擎
+                        if (idx + 1 < ONLINE_TTS.length) {
+                            tryEngine(idx + 1);            // 多引擎：切下一个
+                        } else if (attempts < MAX_ATTEMPTS - 1) {
+                            attempts++;                    // 单引擎：重试一次（网络抖动自愈）
+                            setTimeout(() => { if (!settled && seq === onlineSeq) tryEngine(idx); }, 350);
+                        } else {
+                            finish(false);
+                        }
                     }
                 };
 
                 a.onerror = () => engineSettle(false, '加载失败');
                 a.onplaying = () => engineSettle(true);
+                a.oncanplay = () => engineSettle(true);    // 缓冲就绪即视为可播（更宽容，避免漏判）
                 a.onended = () => { if (onlineAudio === a) onlineAudio = null; };
                 a.volume = 1;
                 a.muted = false;
@@ -487,27 +507,26 @@ const Audio = (() => {
                 const p = a.play();
                 if (p && p.then) {
                     p.then(() => {
-                        // play() 成功 → 给 onplaying 400ms 机会，否则直接算成功
+                        // play() 成功 → 给 onplaying/oncanplay 400ms 机会，否则直接算成功
                         // （部分安卓浏览器 onplaying 不触发但音频实际在播放）
                         if (!engineDone && !settled) {
                             setTimeout(() => {
-                                if (!engineDone && !settled && seq === onlineSeq) {
-                                    engineSettle(true);
-                                }
+                                if (!engineDone && !settled && seq === onlineSeq) engineSettle(true);
                             }, 400);
                         }
                     }).catch((e) => engineSettle(false, String(e && e.name || e)));
                 }
 
-                // 800ms 未出声 → 切换下一个引擎（不等 8s 超时）
-                switchTimer = setTimeout(() => {
-                    if (!engineDone) engineSettle(false, '超时');
-                }, 800);
+                // 仅当存在下一个引擎时才用 800ms 短超时快速切换；
+                // 单引擎时耐心等待（由下方 6s 总兜底收口），绝不轻易判失败。
+                if (idx + 1 < ONLINE_TTS.length) {
+                    setTimeout(() => { if (!engineDone) engineSettle(false, '超时'); }, 800);
+                }
             };
 
             tryEngine(0);
 
-            // 总兜底 6s
+            // 总兜底 6s：仍无声音才判定失败
             setTimeout(() => finish(false), 6000);
         });
     }
@@ -525,8 +544,8 @@ const Audio = (() => {
             let v = null;
             try {
                 v = document.createElement('video');
-                v.preload = 'metadata';
-                v.muted = true;
+                v.preload = 'auto';
+                v.muted = false;
                 // 屏幕外、非 display:none，规避个别浏览器对隐藏媒体的特殊处理
                 v.style.position = 'fixed';
                 v.style.left = '-9999px';
@@ -535,14 +554,16 @@ const Audio = (() => {
             let done = false;
             const finish = (ok, err) => {
                 if (done) return; done = true;
-                try { v.removeAttribute('src'); v.load(); } catch (e) { /* 忽略 */ }
+                try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* 忽略 */ }
                 resolve({ ok, err });
             };
-            const to = setTimeout(() => finish(false, '超时（网络不可达/被拦截）'), 6000);
+            const to = setTimeout(() => finish(false, '超时（网络不可达/被拦截，或媒体解码慢）'), 6000);
+            // 真正触发播放，最贴近实际发音路径（诊断在用户点击手势内，允许自动播放）
             v.oncanplay = () => { clearTimeout(to); finish(true); };
-            v.onloadedmetadata = () => { clearTimeout(to); finish(true); };
+            v.onplaying = () => { clearTimeout(to); finish(true); };
             v.onerror = () => { clearTimeout(to); finish(false, '加载失败（可能被网络拦截）'); };
             v.src = url; v.load();
+            try { const p = v.play(); if (p && p.then) p.catch(() => {}); } catch (e) { /* 忽略 */ }
         });
     }
 
