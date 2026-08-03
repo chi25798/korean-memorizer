@@ -609,7 +609,7 @@ body {
 }
 
 .word-korean {
-    font-size: clamp(54px, 7vw, 76px);
+    font-size: clamp(66px, 8.5vw, 92px);
     font-weight: 700;
     color: var(--text-main);
     margin-bottom: 14px;
@@ -655,7 +655,7 @@ body {
 }
 
 .example-korean {
-    font-size: 18px;
+    font-size: 21px;
     color: var(--text-main);
     margin-bottom: 8px;
     font-weight: 500;
@@ -879,7 +879,7 @@ body {
 }
 
 .flash-korean {
-    font-size: 48px;
+    font-size: 58px;
     font-weight: 700;
     margin-bottom: 12px;
 }
@@ -995,7 +995,7 @@ body {
 }
 
 .spell-correct {
-    font-size: 18px;
+    font-size: 22px;
     color: var(--blue-deep);
     margin-bottom: 8px;
 }
@@ -1599,7 +1599,7 @@ body {
 }
 
 .wb-korean {
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 700;
     margin-bottom: 4px;
 }
@@ -2209,7 +2209,7 @@ body {
 }
 
 .daily-korean {
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 700;
     color: var(--pink-deep);
     margin-bottom: 6px;
@@ -2576,7 +2576,7 @@ body {
 }
 
 .vocab-word-ko {
-    font-size: 19px;
+    font-size: 23px;
     font-weight: 700;
     color: var(--pink-deep);
     line-height: 1.4;
@@ -2836,7 +2836,7 @@ body {
     border: 2px solid #EFE6F5;
     border-radius: 14px;
     padding: 14px 18px;
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 600;
     color: var(--text-main);
     cursor: pointer;
@@ -3600,7 +3600,7 @@ body {
     border-bottom: 1px dashed #EEF1F6;
 }
 .clr-word-row:last-child { border-bottom: none; }
-.clr-word-ko { font-size: 14px; color: #333; font-weight: 600; }
+.clr-word-ko { font-size: 17px; color: #333; font-weight: 600; }
 .clr-word-zh { font-size: 13px; color: #8A94A6; flex: 1; }
 .clr-word-del {
     width: 24px; height: 24px;
@@ -3859,7 +3859,7 @@ body {
     border-radius: 14px;
 }
 .nb-item-main { flex: 1; min-width: 0; }
-.nb-item-korean { font-size: 17px; font-weight: 700; color: #1f2937; }
+.nb-item-korean { font-size: 20px; font-weight: 700; color: #1f2937; }
 .nb-item-pron { font-size: 12.5px; color: #9aa2b1; margin: 1px 0 2px; }
 .nb-item-chinese { font-size: 14px; color: #374151; }
 .nb-item-example { font-size: 12px; color: #aab0bd; margin-top: 3px; line-height: 1.5; }
@@ -3880,7 +3880,7 @@ body {
     box-shadow: 0 18px 50px rgba(0,0,0,.22);
 }
 .nb-study-progress { font-size: 13px; color: #9aa2b1; margin-bottom: 14px; }
-.nb-study-korean { font-size: 34px; font-weight: 800; color: #1f2937; letter-spacing: .5px; }
+.nb-study-korean { font-size: 42px; font-weight: 800; color: #1f2937; letter-spacing: .5px; }
 .nb-study-pron { font-size: 14px; color: #9aa2b1; margin: 4px 0 10px; }
 .nb-study-speak {
     width: 56px; height: 56px; border-radius: 50%;
@@ -3994,7 +3994,7 @@ body {
     border-radius: 14px;
 }
 .nb-item-main { flex: 1; min-width: 0; }
-.nb-item-korean { font-size: 17px; font-weight: 700; color: #1f2937; }
+.nb-item-korean { font-size: 20px; font-weight: 700; color: #1f2937; }
 .nb-item-pron { font-size: 12.5px; color: #9aa2b1; margin: 1px 0 2px; }
 .nb-item-chinese { font-size: 14px; color: #374151; }
 .nb-item-example { font-size: 12px; color: #aab0bd; margin-top: 3px; line-height: 1.5; }
@@ -4015,7 +4015,7 @@ body {
     box-shadow: 0 18px 50px rgba(0,0,0,.22);
 }
 .nb-study-progress { font-size: 13px; color: #9aa2b1; margin-bottom: 14px; }
-.nb-study-korean { font-size: 34px; font-weight: 800; color: #1f2937; letter-spacing: .5px; }
+.nb-study-korean { font-size: 42px; font-weight: 800; color: #1f2937; letter-spacing: .5px; }
 .nb-study-pron { font-size: 14px; color: #9aa2b1; margin: 4px 0 10px; }
 .nb-study-speak {
     width: 56px; height: 56px; border-radius: 50%;
