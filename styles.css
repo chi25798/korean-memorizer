@@ -4053,3 +4053,68 @@ body {
 .nb-add-item .btn-mini { flex-shrink: 0; }
 .nb-add-item .btn-mini.nb-added { background: #eef0f5; color: #9aa2b1; cursor: default; }
 .nb-add-actions { margin-top: 12px; text-align: right; }
+
+/* ===== 词本：多本布局（v69） ===== */
+.nb-layout { display: flex; gap: 16px; align-items: stretch; }
+.nb-sidebar {
+    width: 172px; flex-shrink: 0; background: #fff; border-radius: 16px;
+    padding: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.04); align-self: flex-start;
+}
+.nb-sidebar-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 700; color: #374151; margin-bottom: 10px; font-size: 14px;
+}
+.nb-book-list { display: flex; flex-direction: column; gap: 6px; }
+.nb-book-item {
+    display: flex; align-items: center; gap: 8px; padding: 10px 10px;
+    border-radius: 12px; cursor: pointer; transition: background .15s;
+}
+.nb-book-item:hover { background: #f5f3fb; }
+.nb-book-item.active {
+    background: linear-gradient(135deg, rgba(255,107,157,.12), rgba(78,205,196,.12));
+    box-shadow: inset 0 0 0 1.5px rgba(255,107,157,.25);
+}
+.nb-book-icon { font-size: 16px; flex-shrink: 0; }
+.nb-book-name {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 14px; color: #1f2937; font-weight: 600;
+}
+.nb-book-count {
+    font-size: 12px; color: #9aa2b1; background: #f0f1f5;
+    border-radius: 10px; padding: 1px 8px; flex-shrink: 0;
+}
+.nb-main { flex: 1; min-width: 0; }
+.nb-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.nb-toolbar-title { display: flex; align-items: baseline; gap: 8px; font-weight: 800; color: #1f2937; font-size: 16px; }
+.nb-current-count { font-size: 13px; color: #9aa2b1; font-weight: 600; }
+.nb-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.nb-tip { color: #6b7280; font-size: 13px; margin: 6px 0 14px; line-height: 1.6; }
+.nb-pick-card, .nb-name-card {
+    background: #fff; border-radius: 18px; padding: 20px;
+    width: min(420px, 90vw); max-height: 84vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,.18);
+}
+.nb-pick-list { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 14px; }
+.nb-pick-item {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border-radius: 12px; background: #f7f8fb; cursor: pointer; transition: background .15s;
+}
+.nb-pick-item:hover { background: #eef0f6; }
+.nb-pick-item.disabled { opacity: .55; cursor: default; }
+.nb-pick-icon { font-size: 18px; flex-shrink: 0; }
+.nb-pick-name { flex: 1; min-width: 0; font-weight: 700; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-pick-count { font-size: 12px; color: #9aa2b1; flex-shrink: 0; }
+.nb-pick-new { display: flex; gap: 8px; margin-bottom: 12px; }
+.nb-pick-new input { flex: 1; }
+.nb-name-card input { width: 100%; }
+.nb-name-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.nb-pick-new input, .nb-name-card input {
+    padding: 10px 12px; border: 1.5px solid #e2e5ee; border-radius: 10px;
+    font-size: 14px; outline: none; transition: border-color .15s;
+}
+.nb-pick-new input:focus, .nb-name-card input:focus { border-color: #FF6B9D; }
+@media (max-width: 640px) {
+    .nb-layout { flex-direction: column; }
+    .nb-sidebar { width: 100%; }
+    .nb-book-list { flex-direction: row; flex-wrap: wrap; }
+    .nb-book-item { flex: 1 1 auto; }
+}

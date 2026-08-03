@@ -114,47 +114,129 @@ function findWordById(id) {
     return allWords().find(w => w.id === id) || null;
 }
 const Notebooks = {
-    hard: [],    // [{id, addedAt, source}]
-    wrong: [],   // [{id, addedAt, source}]
+    // 多本结构：保留难词本(hard) / 错词本(wrong) 两个默认本（自动收集照常），并支持任意自定义本
+    // 每个本 = { id, name, type:'hard'|'wrong'|'custom', words:[{id, addedAt, source}] }
+    books: [],
+    currentBookId: null,
 
-    _key(type) {
-        return Profiles.prefix(Profiles.currentId) + (type === 'hard' ? 'hard_words' : 'wrong_words');
-    },
+    _key() { return Profiles.prefix(Profiles.currentId) + 'notebooks'; },
+
     load() {
-        try { this.hard = JSON.parse(localStorage.getItem(this._key('hard')) || '[]') || []; }
-        catch (e) { this.hard = []; }
-        try { this.wrong = JSON.parse(localStorage.getItem(this._key('wrong')) || '[]') || []; }
-        catch (e) { this.wrong = []; }
+        const raw = localStorage.getItem(this._key());
+        if (raw) {
+            try {
+                const d = JSON.parse(raw);
+                this.books = Array.isArray(d.books) ? d.books : [];
+                this.currentBookId = d.currentBookId || null;
+            } catch (e) { this.books = []; this.currentBookId = null; }
+        } else {
+            this.books = [];
+            this.currentBookId = null;
+        }
+        this._ensureDefaults();
+        if (!this.currentBookId || !this.books.find(b => b.id === this.currentBookId)) {
+            this.currentBookId = (this.books.find(b => b.type === 'hard') || this.books[0] || {}).id || null;
+        }
     },
-    _save(type) {
-        try { localStorage.setItem(this._key(type), JSON.stringify(type === 'hard' ? this.hard : this.wrong)); }
+
+    // 首次迁移：把旧的 km_xxx_hard_words / wrong_words 合并进来，并补齐两个默认本
+    _ensureDefaults() {
+        const prefix = Profiles.prefix(Profiles.currentId);
+        const hardKey = prefix + 'hard_words';
+        const wrongKey = prefix + 'wrong_words';
+        if (!this.books.find(b => b.type === 'hard')) {
+            let words = [];
+            if (localStorage.getItem(hardKey)) {
+                try { words = JSON.parse(localStorage.getItem(hardKey)) || []; } catch (e) { words = []; }
+                localStorage.removeItem(hardKey);   // 迁移后删除旧键，避免重复
+            }
+            this.books.unshift({ id: 'hard', name: '难词本', type: 'hard', words: words });
+        }
+        if (!this.books.find(b => b.type === 'wrong')) {
+            let words = [];
+            if (localStorage.getItem(wrongKey)) {
+                try { words = JSON.parse(localStorage.getItem(wrongKey)) || []; } catch (e) { words = []; }
+                localStorage.removeItem(wrongKey);
+            }
+            this.books.push({ id: 'wrong', name: '错词本', type: 'wrong', words: words });
+        }
+    },
+
+    save() {
+        try { localStorage.setItem(this._key(), JSON.stringify({ books: this.books, currentBookId: this.currentBookId })); }
         catch (e) { /* 忽略 */ }
     },
-    add(type, id, source) {
+
+    getBook(id) { return this.books.find(b => b.id === id); },
+    current() { return this.getBook(this.currentBookId); },
+    typeBook(type) { return this.books.find(b => b.type === type); },
+
+    addWord(bookId, id, source) {
         if (!id) return false;
-        this.load();
-        const arr = type === 'hard' ? this.hard : this.wrong;
-        if (arr.some(x => x.id === id)) return false;   // 去重
-        arr.push({ id: id, addedAt: Date.now(), source: source || '' });
-        this._save(type);
+        const b = this.getBook(bookId);
+        if (!b) return false;
+        if (b.words.some(x => x.id === id)) return false;   // 去重
+        b.words.push({ id: id, addedAt: Date.now(), source: source || '' });
+        this.save();
         return true;
     },
-    remove(type, id) {
-        this.load();
-        if (type === 'hard') this.hard = this.hard.filter(x => x.id !== id);
-        else this.wrong = this.wrong.filter(x => x.id !== id);
-        this._save(type);
+
+    // 自动收集（背单词/复习「不会」→ hard；拼写写错 → wrong）走类型本
+    autoAdd(type, id, source) {
+        const b = this.typeBook(type);
+        return b ? this.addWord(b.id, id, source) : false;
     },
-    has(type, id) {
-        return (type === 'hard' ? this.hard : this.wrong).some(x => x.id === id);
+
+    removeWord(bookId, id) {
+        const b = this.getBook(bookId);
+        if (!b) return;
+        b.words = b.words.filter(x => x.id !== id);
+        this.save();
     },
-    wordsOf(type) {
-        const arr = type === 'hard' ? this.hard : this.wrong;
-        return arr.map(x => findWordById(x.id)).filter(Boolean);
+
+    hasWord(bookId, id) {
+        const b = this.getBook(bookId);
+        return b ? b.words.some(x => x.id === id) : false;
     },
-    clear(type) {
-        if (type === 'hard') this.hard = []; else this.wrong = [];
-        this._save(type);
+
+    wordsOf(bookId) {
+        const b = this.getBook(bookId);
+        return b ? b.words.map(x => findWordById(x.id)).filter(Boolean) : [];
+    },
+
+    clearBook(bookId) {
+        const b = this.getBook(bookId);
+        if (b) { b.words = []; this.save(); }
+    },
+
+    // 自定义本：可新建 / 改名 / 删除（默认本不可删）
+    createBook(name) {
+        const b = {
+            id: 'b' + Date.now().toString(36) + Math.floor(Math.random() * 1000),
+            name: (name || '').trim() || '新本子',
+            type: 'custom',
+            words: []
+        };
+        this.books.push(b);
+        this.currentBookId = b.id;
+        this.save();
+        return b;
+    },
+
+    renameBook(bookId, name) {
+        const b = this.getBook(bookId);
+        if (b) { b.name = (name || '').trim() || b.name; this.save(); }
+    },
+
+    deleteBook(bookId) {
+        const b = this.getBook(bookId);
+        if (!b || b.type !== 'custom') return false;
+        this.books = this.books.filter(x => x.id !== bookId);
+        if (this.currentBookId === bookId) {
+            this.currentBookId = (this.books.find(x => x.type === 'hard') || this.books[0]).id;
+        }
+        this.save();
+        return true;
     }
 };
 
@@ -1135,7 +1217,7 @@ function rateWord(rate) {
     const wasNew = word.status === 'new';
 
     // 不会（最低评分）→ 自动收进难词本，方便反复巩固
-    if (rate === 0) Notebooks.add('hard', word.id, 'learn');
+    if (rate === 0) Notebooks.autoAdd('hard', word.id, 'learn');
 
     // 混合模式下同一个词会出现多次：只有第一次评分计入艾宾浩斯，
     // 之后除非评得更差（说明其实没记住，把 box 拉回来），否则只当练习、不重复升级
@@ -1344,7 +1426,7 @@ function rateFlashWord(rate) {
     const word = flashQueue[flashIndex];
     SRS.review(word, rate);
     // 闪过复习里「不熟悉(0)」→ 自动收进难词本
-    if (rate === 0) Notebooks.add('hard', word.id, 'review');
+    if (rate === 0) Notebooks.autoAdd('hard', word.id, 'review');
     DB.save();
     flashIndex++;
     showFlashCard();
@@ -1442,7 +1524,7 @@ function submitSpell() {
     const isCorrect = normKo(input) === normKo(word.korean);
 
     // 拼写写错 → 自动收进错词本，方便之后再练
-    if (!isCorrect) Notebooks.add('wrong', word.id, 'spell');
+    if (!isCorrect) Notebooks.autoAdd('wrong', word.id, 'spell');
 
     document.getElementById('spell-correct').innerHTML = `<span class="label">正确答案：</span>${word.korean}`;
     const yourEl = document.getElementById('spell-your');
@@ -1604,7 +1686,7 @@ function selfRateSpell(rate) {
     if (!word) return;
     const yourEl = document.getElementById('spell-your');
     // 手写自评「写错了」→ 自动收进错词本
-    if (rate < 2) Notebooks.add('wrong', word.id, 'spell-canvas');
+    if (rate < 2) Notebooks.autoAdd('wrong', word.id, 'spell-canvas');
     if (rate >= 2) {
         yourEl.className = 'spell-your correct';
         yourEl.innerHTML = '<span class="label">自评：</span>写对了 ✓';
@@ -1676,29 +1758,54 @@ function renderWordbook() {
     });
 }
 
-// ===== 词本（难词本 / 错词本）=====
-let nbCurrentTab = 'hard';
+// ===== 词本（多本：默认难词本/错词本 + 自定义本）=====
 let nbStudyQueue = [];
 let nbStudyIndex = 0;
-let nbAddType = 'hard';
+let nbAddBookId = 'hard';     // 添加弹窗当前目标本
+let nbPickWordId = null;      // 背单词/闪过「加入词本」暂存单词 id
+let nbNameMode = 'new';       // 'new' 新建 | 'rename' 改名
 
 function initNotebookPage() {
     Notebooks.load();
-    nbCurrentTab = 'hard';
-    document.querySelectorAll('.nb-tab').forEach(t => t.classList.toggle('active', t.dataset.nb === 'hard'));
     renderNotebook();
 }
 
 function renderNotebook() {
     Notebooks.load();
+    renderBookList();
+    renderBookWords();
+}
+
+function renderBookList() {
+    const listEl = $el('nb-book-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    Notebooks.books.forEach(b => {
+        const item = document.createElement('div');
+        item.className = 'nb-book-item' + (b.id === Notebooks.currentBookId ? ' active' : '');
+        const icon = b.type === 'hard' ? '📕' : (b.type === 'wrong' ? '❌' : '📓');
+        item.innerHTML = `<span class="nb-book-icon">${icon}</span>`
+            + `<span class="nb-book-name">${escapeHtml(b.name)}</span>`
+            + `<span class="nb-book-count">${b.words.length}</span>`;
+        item.addEventListener('click', () => {
+            Notebooks.currentBookId = b.id;
+            Notebooks.save();
+            renderNotebook();
+        });
+        listEl.appendChild(item);
+    });
+}
+
+function renderBookWords() {
+    const b = Notebooks.current();
     const listEl = $el('nb-list');
     const emptyEl = $el('nb-empty');
-    const type = nbCurrentTab;
-    const words = Notebooks.wordsOf(type);
-    $el('nb-hard-count').textContent = Notebooks.hard.length;
-    $el('nb-wrong-count').textContent = Notebooks.wrong.length;
-
-    if (words.length === 0) {
+    if ($el('nb-current-title')) $el('nb-current-title').textContent = b ? b.name : '';
+    if ($el('nb-current-count')) $el('nb-current-count').textContent = b ? (b.words.length + ' 词') : '0 词';
+    const delBtn = $el('nb-delete');
+    if (delBtn) delBtn.classList.toggle('hidden', !(b && b.type === 'custom'));   // 仅自定义本可删
+    const words = b ? Notebooks.wordsOf(b.id) : [];
+    if (!b || words.length === 0) {
         listEl.innerHTML = '';
         emptyEl.classList.remove('hidden');
         return;
@@ -1721,24 +1828,20 @@ function renderNotebook() {
             </div>
         `;
         listEl.appendChild(item);
-    });
-    listEl.querySelectorAll('.wb-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
-            const action = this.dataset.action;
-            if (action === 'speak') {
-                Audio.speak(this.dataset.word, 0.9, this.dataset.id);
-            } else if (action === 'remove') {
-                Notebooks.remove(nbCurrentTab, this.dataset.id);
-                renderNotebook();
-                toast('已移除');
-            }
+        item.querySelector('[data-action="speak"]').addEventListener('click', () => Audio.speak(word.korean, 0.9, word.id));
+        item.querySelector('[data-action="remove"]').addEventListener('click', () => {
+            Notebooks.removeWord(b.id, word.id);
+            renderNotebook();
+            toast('已移除');
         });
     });
 }
 
-function startNotebookStudy(type) {
+function startNotebookStudy(bookId) {
+    const book = Notebooks.getBook(bookId);
+    if (!book) return;
     Notebooks.load();
-    const words = Notebooks.wordsOf(type);
+    const words = Notebooks.wordsOf(bookId);
     if (words.length === 0) { toast('这个本还是空的'); return; }
     nbStudyQueue = words.slice();
     nbStudyIndex = 0;
@@ -1776,16 +1879,17 @@ function flipNbStudyCard() {
 }
 
 function nbStudyResult(known) {
-    const word = nbStudyQueue[nbStudyIndex];
-    if (word && known) Notebooks.remove(nbCurrentTab, word.id);  // 记住了 → 移出本，下一轮不再出现
+    // 始终保留：复习后单词不删除，可反复巩固（二刷 / 三刷都还在本里）
     nbStudyIndex++;
     showNbStudyCard();
 }
 
-function openNbAdd(type) {
-    nbAddType = type;
+function openNbAdd(bookId) {
+    const book = Notebooks.getBook(bookId);
+    if (!book) return;
+    nbAddBookId = bookId;
     Notebooks.load();
-    $el('nb-add-target-label').textContent = type === 'hard' ? '难词本' : '错词本';
+    $el('nb-add-target-label').textContent = book.name;
     $el('nb-add-search').value = '';
     renderNbAddResults('');
     $el('nb-add-overlay').classList.remove('hidden');
@@ -1807,7 +1911,7 @@ function renderNbAddResults(q) {
     emptyEl.classList.add('hidden');
     listEl.innerHTML = '';
     pool.forEach(w => {
-        const inBook = Notebooks.has(nbAddType, w.id);
+        const inBook = Notebooks.hasWord(nbAddBookId, w.id);
         const item = document.createElement('div');
         item.className = 'nb-add-item';
         item.innerHTML = `
@@ -1822,7 +1926,7 @@ function renderNbAddResults(q) {
     listEl.querySelectorAll('button[data-add-id]').forEach(b => {
         b.addEventListener('click', function () {
             const id = this.dataset.addId;
-            if (Notebooks.add(nbAddType, id, 'manual')) {
+            if (Notebooks.addWord(nbAddBookId, id, 'manual')) {
                 toast('已添加');
                 renderNbAddResults($el('nb-add-search').value);
                 renderNotebook();
@@ -1831,45 +1935,101 @@ function renderNbAddResults(q) {
     });
 }
 
-function bindNotebook() {
-    // tab 切换
-    document.querySelectorAll('.nb-tab').forEach(t => {
-        t.addEventListener('click', () => {
-            nbCurrentTab = t.dataset.nb;
-            document.querySelectorAll('.nb-tab').forEach(x => x.classList.toggle('active', x === t));
-            renderNotebook();
-        });
+// 背单词 / 闪过卡片「加入词本」：弹出选本（可新建）
+function openNbPick(wordId) {
+    nbPickWordId = wordId;
+    Notebooks.load();
+    renderNbPickList();
+    $el('nb-pick-overlay').classList.remove('hidden');
+}
+function renderNbPickList() {
+    const listEl = $el('nb-pick-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    Notebooks.books.forEach(b => {
+        const inBook = Notebooks.hasWord(b.id, nbPickWordId);
+        const item = document.createElement('div');
+        item.className = 'nb-pick-item' + (inBook ? ' nb-pick-in disabled' : '');
+        const icon = b.type === 'hard' ? '📕' : (b.type === 'wrong' ? '❌' : '📓');
+        item.innerHTML = `<span class="nb-pick-icon">${icon}</span>`
+            + `<span class="nb-pick-name">${escapeHtml(b.name)}</span>`
+            + `<span class="nb-pick-count">${b.words.length}${inBook ? ' · 已在本中' : ''}</span>`;
+        if (!inBook) {
+            item.addEventListener('click', () => {
+                Notebooks.addWord(b.id, nbPickWordId, 'manual');
+                toast('已加入「' + b.name + '」📓');
+                $el('nb-pick-overlay').classList.add('hidden');
+            });
+        }
+        listEl.appendChild(item);
     });
-    // 背单词卡片「加入难词本」
+}
+function openNbName(mode) {
+    nbNameMode = mode;
+    const b = (mode === 'rename') ? Notebooks.current() : null;
+    $el('nb-name-title').textContent = (mode === 'rename') ? '重命名词本' : '新建词本';
+    $el('nb-name-input').value = (mode === 'rename' && b) ? b.name : '';
+    $el('nb-name-overlay').classList.remove('hidden');
+    setTimeout(() => { const s = $el('nb-name-input'); if (s) s.focus(); }, 50);
+}
+function confirmNbName() {
+    const name = $el('nb-name-input').value.trim();
+    if (!name) { toast('请输入名称', 'error'); return; }
+    if (nbNameMode === 'rename') {
+        const b = Notebooks.current();
+        if (b) { Notebooks.renameBook(b.id, name); toast('已改名'); }
+    } else {
+        Notebooks.createBook(name);
+        toast('已新建词本 📓');
+    }
+    $el('nb-name-overlay').classList.add('hidden');
+    renderNotebook();
+}
+
+function bindNotebook() {
+    // 背单词卡片「加入词本」
     const bh = $el('btn-add-hard');
     if (bh) bh.addEventListener('click', () => {
         const word = learnQueue[learnIndex];
         if (!word) return;
-        if (Notebooks.add('hard', word.id, 'manual')) toast('已加入难词本 📕');
-        else toast('这个词已在难词本');
+        openNbPick(word.id);
     });
-    // 闪过复习卡片「加入难词本」
+    // 闪过复习卡片「加入词本」
     const fh = $el('flash-add-hard');
     if (fh) fh.addEventListener('click', () => {
         const word = flashQueue[flashIndex];
         if (!word) return;
-        if (Notebooks.add('hard', word.id, 'manual')) toast('已加入难词本 📕');
-        else toast('这个词已在难词本');
+        openNbPick(word.id);
     });
     // 词本页操作
     const study = $el('nb-study');
-    if (study) study.addEventListener('click', () => startNotebookStudy(nbCurrentTab));
+    if (study) study.addEventListener('click', () => startNotebookStudy(Notebooks.currentBookId));
     const add = $el('nb-add');
-    if (add) add.addEventListener('click', () => openNbAdd(nbCurrentTab));
+    if (add) add.addEventListener('click', () => openNbAdd(Notebooks.currentBookId));
+    const rename = $el('nb-rename');
+    if (rename) rename.addEventListener('click', () => openNbName('rename'));
     const clear = $el('nb-clear');
     if (clear) clear.addEventListener('click', () => {
-        const label = nbCurrentTab === 'hard' ? '难词本' : '错词本';
-        if (confirm(`确定清空${label}吗？此操作不可撤销。`)) {
-            Notebooks.clear(nbCurrentTab);
+        const b = Notebooks.current();
+        if (!b) return;
+        if (confirm(`确定清空「${b.name}」里的所有单词吗？此操作不可撤销（本本身保留）。`)) {
+            Notebooks.clearBook(b.id);
             renderNotebook();
-            toast(`已清空${label}`);
+            toast(`已清空「${b.name}」`);
         }
     });
+    const del = $el('nb-delete');
+    if (del) del.addEventListener('click', () => {
+        const b = Notebooks.current();
+        if (!b || b.type !== 'custom') return;
+        if (confirm(`确定删除词本「${b.name}」吗？里面的单词会一起删除，此操作不可撤销。`)) {
+            Notebooks.deleteBook(b.id);
+            renderNotebook();
+            toast(`已删除「${b.name}」`);
+        }
+    });
+    const newBook = $el('nb-new-book');
+    if (newBook) newBook.addEventListener('click', () => openNbName('new'));
     // 学习弹窗
     const flip = $el('nb-study-flip');
     if (flip) flip.addEventListener('click', flipNbStudyCard);
@@ -1896,6 +2056,31 @@ function bindNotebook() {
     if (addOv) addOv.addEventListener('click', (e) => { if (e.target === addOv) addOv.classList.add('hidden'); });
     const studyOv = $el('nb-study-overlay');
     if (studyOv) studyOv.addEventListener('click', (e) => { if (e.target === studyOv) { studyOv.classList.add('hidden'); renderNotebook(); } });
+    // 选本弹窗
+    const pickOv = $el('nb-pick-overlay');
+    if (pickOv) {
+        pickOv.addEventListener('click', (e) => { if (e.target === pickOv) pickOv.classList.add('hidden'); });
+        const pickNew = $el('nb-pick-new-btn');
+        if (pickNew) pickNew.addEventListener('click', () => {
+            const name = $el('nb-pick-new-name').value.trim();
+            if (!name) { toast('请输入本子名称', 'error'); return; }
+            const b = Notebooks.createBook(name);
+            if (nbPickWordId) Notebooks.addWord(b.id, nbPickWordId, 'manual');
+            toast('已新建并加入「' + name + '」📓');
+            pickOv.classList.add('hidden');
+        });
+        const pickCancel = $el('nb-pick-cancel');
+        if (pickCancel) pickCancel.addEventListener('click', () => $el('nb-pick-overlay').classList.add('hidden'));
+    }
+    // 命名弹窗（新建 / 改名）
+    const nameOv = $el('nb-name-overlay');
+    if (nameOv) {
+        nameOv.addEventListener('click', (e) => { if (e.target === nameOv) nameOv.classList.add('hidden'); });
+        const nameOk = $el('nb-name-ok');
+        if (nameOk) nameOk.addEventListener('click', confirmNbName);
+        const nameCancel = $el('nb-name-cancel');
+        if (nameCancel) nameCancel.addEventListener('click', () => nameOv.classList.add('hidden'));
+    }
 }
 
 // ===== 管理页 =====
@@ -2838,7 +3023,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v68';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v69';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';

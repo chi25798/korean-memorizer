@@ -166,7 +166,7 @@
                                 <span class="btn-rate-hint">下次见</span>
                             </button>
                         </div>
-                        <button class="btn-add-notebook" id="btn-add-hard">📕 加入难词本</button>
+                        <button class="btn-add-notebook" id="btn-add-hard">📥 加入词本</button>
                     </div>
                     <!-- 翻页按钮（移至卡片下方，居中） -->
                     <div class="card-nav-row">
@@ -265,7 +265,7 @@
                         <button class="btn-rate btn-fuzzy" data-flash-rate="1">😐 模糊</button>
                         <button class="btn-rate btn-known" data-flash-rate="2">😊 记住了</button>
                     </div>
-                    <button class="btn-add-notebook" id="flash-add-hard">📕 加入难词本</button>
+                    <button class="btn-add-notebook" id="flash-add-hard">📥 加入词本</button>
                 </div>
 
                 <!-- 拼写复习 -->
@@ -559,23 +559,38 @@
                 </div>
             </div>
 
-            <!-- 词本页：难词本 / 错词本 -->
+            <!-- 词本页：多本（难词本 / 错词本 + 自定义本） -->
             <div class="page" id="page-notebook">
                 <div class="page-header">
                     <h2>词本</h2>
                 </div>
-                <div class="nb-tabs">
-                    <button class="nb-tab active" data-nb="hard">📕 难词本 <span class="nb-count" id="nb-hard-count">0</span></button>
-                    <button class="nb-tab" data-nb="wrong">❌ 错词本 <span class="nb-count" id="nb-wrong-count">0</span></button>
+                <p class="nb-tip">背单词/复习里「不会」会自动进难词本，拼写写错会自动进错词本。可自建任意本子、改名、反复学习，复习后保留。</p>
+                <div class="nb-layout">
+                    <aside class="nb-sidebar">
+                        <div class="nb-sidebar-head">
+                            <span>我的词本</span>
+                            <button class="btn-mini" id="nb-new-book">➕ 新建</button>
+                        </div>
+                        <div class="nb-book-list" id="nb-book-list"></div>
+                    </aside>
+                    <section class="nb-main">
+                        <div class="nb-toolbar">
+                            <div class="nb-toolbar-title">
+                                <span class="nb-current-title" id="nb-current-title"></span>
+                                <span class="nb-current-count" id="nb-current-count"></span>
+                            </div>
+                            <div class="nb-toolbar-actions">
+                                <button class="btn-primary" id="nb-study">▶ 开始学习</button>
+                                <button class="btn-secondary" id="nb-add">➕ 添加单词</button>
+                                <button class="btn-secondary" id="nb-rename">✏️ 改名</button>
+                                <button class="btn-secondary" id="nb-clear">🧹 清空本</button>
+                                <button class="btn-danger-soft hidden" id="nb-delete">🗑 删除本</button>
+                            </div>
+                        </div>
+                        <div class="nb-list" id="nb-list"></div>
+                        <div class="nb-empty empty-hint hidden" id="nb-empty">这个本还是空的，去学习时遇到的难题会自动收集到这里～</div>
+                    </section>
                 </div>
-                <p class="nb-tip">背单词/复习里「不会」会自动进难词本，拼写写错会自动进错词本。这里可反复学习，也能自己加、自己删。</p>
-                <div class="nb-actions">
-                    <button class="btn-primary nb-btn-study" id="nb-study">▶ 开始学习</button>
-                    <button class="btn-secondary" id="nb-add">➕ 添加单词</button>
-                    <button class="btn-danger-soft" id="nb-clear">🗑 清空本</button>
-                </div>
-                <div class="nb-list" id="nb-list"></div>
-                <div class="nb-empty empty-hint hidden" id="nb-empty">这个本还是空的，去学习时遇到的难题会自动收集到这里～</div>
             </div>
         </main>
 
@@ -606,6 +621,31 @@
                 <div class="nb-add-empty empty-hint hidden" id="nb-add-empty">没有找到匹配的单词。</div>
                 <div class="nb-add-actions">
                     <button class="btn-secondary" id="nb-add-close">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 背单词/闪过：选择加入哪个词本 -->
+        <div class="modal-overlay hidden" id="nb-pick-overlay">
+            <div class="nb-pick-card">
+                <h3 class="import-h3">加入哪个词本？</h3>
+                <div class="nb-pick-list" id="nb-pick-list"></div>
+                <div class="nb-pick-new">
+                    <input type="text" id="nb-pick-new-name" placeholder="新建本子名称…" autocomplete="off">
+                    <button class="btn-secondary" id="nb-pick-new-btn">➕ 新建并加入</button>
+                </div>
+                <button class="btn-secondary" id="nb-pick-cancel">取消</button>
+            </div>
+        </div>
+
+        <!-- 新建 / 重命名词本 -->
+        <div class="modal-overlay hidden" id="nb-name-overlay">
+            <div class="nb-name-card">
+                <h3 class="import-h3" id="nb-name-title">新建词本</h3>
+                <input type="text" id="nb-name-input" placeholder="输入词本名称…" autocomplete="off">
+                <div class="nb-name-actions">
+                    <button class="btn-secondary" id="nb-name-cancel">取消</button>
+                    <button class="btn-primary" id="nb-name-ok">确定</button>
                 </div>
             </div>
         </div>
