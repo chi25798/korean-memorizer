@@ -1053,7 +1053,8 @@ function showLearnCard() {
 
     // 先全部盖住，再由各模式决定显隐
     ['card-korean', 'card-pronunciation', 'card-chinese', 'card-example',
-     'card-actions', 'card-options', 'btn-flip', 'card-listen-hint', 'card-prompt-label']
+     'card-actions', 'card-options', 'btn-flip', 'card-listen-hint', 'card-prompt-label',
+     'zh2ko-feedback', 'zh2ko-next']
         .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
 
     // 翻页动画
@@ -1116,6 +1117,7 @@ function renderZh2Ko(word) {
 
 function buildZh2KoOptions(word) {
     const box = document.getElementById('card-options');
+    box.dataset.answered = '';            // 重置作答状态
     // 干扰项：优先同课其他词，不足时补全局
     let pool = DB.getWordsByLesson(currentLearnLesson)
         .filter(w => w.korean && w.korean !== word.korean);
@@ -1134,22 +1136,46 @@ function buildZh2KoOptions(word) {
 }
 
 function onZh2KoPick(btn, word) {
+    const box = document.getElementById('card-options');
+    if (!box || box.dataset.answered === '1') return;   // 已作答则忽略后续点击
     if (btn.dataset.ko === word.korean) {
+        box.dataset.answered = '1';
+        // 正确：高亮该选项并锁定全部选项，保留选项区让「正确」可见
+        box.querySelectorAll('.opt-btn').forEach(b => { b.disabled = true; });
         btn.classList.add('opt-correct');
+        showZh2KoFeedback(true, word);
         revealZh2Ko(word);
     } else {
+        // 错误：标红禁用，提示再选，不揭示正确答案，保留练习机会
         btn.classList.add('opt-wrong');
         btn.disabled = true;
+        showZh2KoFeedback(false, word);
+    }
+}
+
+function showZh2KoFeedback(correct, word) {
+    const fb = document.getElementById('zh2ko-feedback');
+    if (!fb) return;
+    fb.classList.remove('hidden', 'fb-correct', 'fb-wrong');
+    if (correct) {
+        fb.classList.add('fb-correct');
+        fb.textContent = '✓ 回答正确！';
+    } else {
+        fb.classList.add('fb-wrong');
+        fb.textContent = '✗ 不对，再选一次';
     }
 }
 
 function revealZh2Ko(word) {
+    // 显示答案（韩文 / 发音 / 例句），但保留选项区，让「正确」高亮可见
     document.getElementById('card-korean').classList.remove('hidden');
     document.getElementById('card-pronunciation').classList.remove('hidden');
     document.getElementById('card-example').classList.remove('hidden');
     document.getElementById('card-actions').classList.remove('hidden');
-    document.getElementById('card-options').classList.add('hidden');
-    document.getElementById('card-prompt-label').classList.add('hidden');
+    document.getElementById('card-prompt-label').classList.remove('hidden');
+    // 选对后显式出现「下一个」按钮（仅本模式）
+    const nx = document.getElementById('zh2ko-next');
+    if (nx) nx.classList.remove('hidden');
     // 选对后开放 🔊，可听正确答案发音
     const sb = document.getElementById('card-speak');
     if (sb) { sb.disabled = false; sb.classList.remove('is-disabled'); sb.title = '朗读'; }
@@ -2318,6 +2344,9 @@ function bindEvents() {
     const cn = document.getElementById('card-next');
     if (cp) cp.addEventListener('click', cardPrev);
     if (cn) cn.addEventListener('click', cardNext);
+    // 汉语→韩语：作答后的「下一个」按钮
+    const znx = document.getElementById('zh2ko-next');
+    if (znx) znx.addEventListener('click', cardNext);
 
     // 键盘：← → 翻页，空格翻面
     document.addEventListener('keydown', (e) => {
@@ -3023,7 +3052,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v69';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v70';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
