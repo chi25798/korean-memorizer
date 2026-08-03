@@ -1070,13 +1070,12 @@ function showLearnCard() {
     else if (mode === 'listen2zh') renderListen2Zh(word);
     else renderKo2Zh(word);
 
-    // 🔊 汉语→韩语模式下先禁音：未选对前朗读会把隐藏的韩语答案报出来
+    // 🔊 汉语→韩语模式下选项本身已是可见韩语文字，朗读仅作音频强化，不再禁音
     const speakBtn = document.getElementById('card-speak');
     if (speakBtn) {
-        const lock = (mode === 'zh2ko');
-        speakBtn.disabled = lock;
-        speakBtn.classList.toggle('is-disabled', lock);
-        speakBtn.title = lock ? '选出正确答案后可听发音' : '朗读';
+        speakBtn.disabled = false;
+        speakBtn.classList.remove('is-disabled');
+        speakBtn.title = '朗读';
     }
 }
 
@@ -3046,7 +3045,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v71';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v72';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
