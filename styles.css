@@ -4123,12 +4123,3 @@ body {
 .zh2ko-feedback { margin: 8px 0 4px; font-size: 15px; font-weight: 800; min-height: 20px; }
 .zh2ko-feedback.fb-correct { color: #1c7a4d; }
 .zh2ko-feedback.fb-wrong { color: #B7303F; }
-.btn-next-word {
-    margin-top: 10px; width: 100%;
-    background: linear-gradient(135deg, #FF6B9D, #4ECDC4);
-    color: #fff; border: none; border-radius: 12px;
-    padding: 12px; font-size: 16px; font-weight: 800; cursor: pointer;
-    transition: filter .15s;
-}
-.btn-next-word:hover { filter: brightness(1.05); }
-.btn-next-word:active { transform: translateY(1px); }

@@ -1054,7 +1054,7 @@ function showLearnCard() {
     // 先全部盖住，再由各模式决定显隐
     ['card-korean', 'card-pronunciation', 'card-chinese', 'card-example',
      'card-actions', 'card-options', 'btn-flip', 'card-listen-hint', 'card-prompt-label',
-     'zh2ko-feedback', 'zh2ko-next']
+     'zh2ko-feedback']
         .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
 
     // 翻页动画
@@ -1173,9 +1173,6 @@ function revealZh2Ko(word) {
     document.getElementById('card-example').classList.remove('hidden');
     document.getElementById('card-actions').classList.remove('hidden');
     document.getElementById('card-prompt-label').classList.remove('hidden');
-    // 选对后显式出现「下一个」按钮（仅本模式）
-    const nx = document.getElementById('zh2ko-next');
-    if (nx) nx.classList.remove('hidden');
     // 选对后开放 🔊，可听正确答案发音
     const sb = document.getElementById('card-speak');
     if (sb) { sb.disabled = false; sb.classList.remove('is-disabled'); sb.title = '朗读'; }
@@ -2344,9 +2341,6 @@ function bindEvents() {
     const cn = document.getElementById('card-next');
     if (cp) cp.addEventListener('click', cardPrev);
     if (cn) cn.addEventListener('click', cardNext);
-    // 汉语→韩语：作答后的「下一个」按钮
-    const znx = document.getElementById('zh2ko-next');
-    if (znx) znx.addEventListener('click', cardNext);
 
     // 键盘：← → 翻页，空格翻面
     document.addEventListener('keydown', (e) => {
@@ -3052,7 +3046,7 @@ function bindUiZoom() {
 }
 
 // ===== 发音方式设置 =====
-const APP_VERSION = 'v70';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
+const APP_VERSION = 'v71';   // 改动功能后同步 +1（与 sw.js / build_deploy.py 的版本一致）
 function ttsEngineDesc(m) {
   if (m === 'online') return '始终使用在线发音（需联网，手机/平板推荐）';
   if (m === 'local') return '使用系统语音（离线可用，需设备装有韩语语音）';
